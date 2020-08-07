@@ -1,0 +1,31 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: OTP ${{matrix.otp}} / Elixir ${{matrix.elixir}}
+    strategy:
+      matrix:
+        otp: [21.3, 22.2, 23.0]
+        elixir: [1.9.4, 1.10.2]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+      - name: Conform
+        uses: talos-systems/conform@v0.1.0-alpha.19
+      - name: Install → Compile dependencies
+        run: |
+          MIX_ENV=test mix deps.get
+          MIX_ENV=test mix deps.compile
+          MIX_ENV=test mix compile
+      - name: Start epmd
+        run: |
+          epmd -daemon
+      - name: Run tests
+        run: |
+          MIX_ENV=test mix test

@@ -1,0 +1,11 @@
+/_build/
+/cover/
+/deps/
+/doc/
+/.fetch
+erl_crash.dump
+*.ez
+tempus-*.tar
+/.elixir_ls/
+/.dialyzer/*.plt*
+.mix_tasks
