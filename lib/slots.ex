@@ -85,7 +85,7 @@ defmodule Tempus.Slots do
     Enum.reduce(other, this, &add(&2, &1))
   end
 
-  @spec add(t(), Slot.t()) :: t() | no_return
+  @spec add(t(), Slot.origin()) :: t() | no_return
   @doc """
   Adds another slot to the slots collection.
 
@@ -103,7 +103,8 @@ defmodule Tempus.Slots do
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
-  def add(%Slots{slots: slots}, %Slot{} = slot) do
+  def add(%Slots{slots: slots}, slot) do
+    slot = Slot.wrap(slot)
     {slots, joint} = Enum.split_with(slots, &Slot.disjoint?(&1, slot))
 
     %Slots{
@@ -113,9 +114,6 @@ defmodule Tempus.Slots do
         |> AVLTree.put(Enum.reduce(joint, slot, &Slot.join([&1, &2])))
     }
   end
-
-  def add(%Slots{}, other),
-    do: raise(Tempus.ArgumentError, expected: Tempus.Slot, passed: other)
 
   @spec inverse(slots :: Slots.t(), remainder :: :keep | :discard) :: Slots.t()
   @doc """
@@ -128,7 +126,7 @@ defmodule Tempus.Slots do
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-08|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-12|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-12|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       ...> |> Tempus.Slots.inverse()
       #Slots<[#Slot<[from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]]>]>

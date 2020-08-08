@@ -7,6 +7,49 @@ defmodule Tempus do
 
   alias Tempus.{Slot, Slots}
 
+  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean()
+  @doc """
+  Checks whether the slot is disjoined against slots.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> Tempus.free?(slots, ~D|2020-08-07|)
+      false
+      iex> Tempus.free?(slots, ~D|2020-08-08|)
+      true
+  """
+  def free?(%Slots{} = slots, slot) do
+    AVLTree.size(Slots.add(slots, Slot.wrap(slot)).slots) == AVLTree.size(slots.slots) + 1
+  end
+
+  @spec days_ahead(slots :: Stots.t(), origin :: Date.t(), count :: integer()) :: Date.t()
+  @doc """
+  Returns the reversed list of free days after origin.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> Tempus.days_ahead(slots, ~D|2020-08-07|, 0)
+      [~D|2020-08-08|]
+      iex> Tempus.days_ahead(slots, ~D|2020-08-07|, 3) |> hd()
+      ~D|2020-08-12|
+  """
+  def days_ahead(slots, origin, count) when is_integer(count) and count >= 0 do
+    origin
+    |> Stream.iterate(&Date.add(&1, 1))
+    |> Enum.reduce_while([], fn
+      _date, acc when length(acc) > count -> {:halt, acc}
+      date, acc -> {:cont, if(free?(slots, date), do: [date | acc], else: acc)}
+    end)
+  end
+
   @spec next_busy(Slots.t(), [{:origin, Slot.origin()} | {:count, pos_integer()}]) ::
           [Slot.t()] | Slot.t() | nil | no_return
   @doc """
