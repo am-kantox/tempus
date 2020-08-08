@@ -7,8 +7,8 @@ defmodule Tempus.Slots do
   ### Examples
 
       iex> slots = [
-      ...>   Tempus.Slot.day(~D|2020-08-07|),
-      ...>   Tempus.Slot.day(~D|2020-08-10|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|),
       ...>   %Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|}]
       ...> Enum.into(slots, %Tempus.Slots{})
@@ -17,6 +17,10 @@ defmodule Tempus.Slots do
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
   alias Tempus.{Slot, Slots}
+
+  @empty AVLTree.new(&Slots.less/2)
+
+  defstruct slots: @empty
 
   @typedoc "AVL Tree specialized for `Tempus` slots type"
   @type avl_tree :: %AVLTree{
@@ -27,10 +31,6 @@ defmodule Tempus.Slots do
 
   @type t :: %Slots{slots: avl_tree()}
 
-  @empty AVLTree.new(&Slots.less/2)
-
-  defstruct slots: @empty
-
   @spec merge(this :: t(), other :: Enum.t()) :: t()
   @doc """
   Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
@@ -40,8 +40,8 @@ defmodule Tempus.Slots do
   ### Examples
 
       iex> slots = [
-      ...>   Tempus.Slot.day(~D|2020-08-07|),
-      ...>   Tempus.Slot.day(~D|2020-08-10|)
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> other = [
       ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
@@ -85,7 +85,7 @@ defmodule Tempus.Slots do
     Enum.reduce(other, this, &add(&2, &1))
   end
 
-  @spec add(t(), Slot.t()) :: t()
+  @spec add(t(), Slot.t()) :: t() | no_return
   @doc """
   Adds another slot to the slots collection.
 
@@ -93,12 +93,12 @@ defmodule Tempus.Slots do
 
   ### Example
 
-      iex> Tempus.Slots.add(%Tempus.Slots{}, Tempus.Slot.day(~D|2020-08-07|))
+      iex> Tempus.Slots.add(%Tempus.Slots{}, Tempus.Slot.wrap(~D|2020-08-07|))
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>]>
 
       iex> %Tempus.Slots{}
-      ...> |> Tempus.Slots.add(Tempus.Slot.day(~D|2020-08-07|))
-      ...> |> Tempus.Slots.add(Tempus.Slot.day(~D|2020-08-10|))
+      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-07|))
+      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-10|))
       ...> |> Tempus.Slots.add(%Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>

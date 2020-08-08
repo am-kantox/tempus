@@ -13,6 +13,9 @@ defmodule Tempus.Slot do
           to: DateTime.t()
         }
 
+  @typedoc "The origin used in comparisons and calculations"
+  @type origin :: Slot.t() | Date.t() | DateTime.t() | nil
+
   defstruct [:from, :to]
 
   @spec valid?(slot :: Slot.t()) :: boolean()
@@ -30,7 +33,7 @@ defmodule Tempus.Slot do
   def valid?(%Slot{from: from, to: to}),
     do: DateTime.compare(from, to) != :gt
 
-  @spec cover?(slot :: Slot.t(), dt :: Slot.t() | Date.t() | DateTime.t(), strict? :: boolean()) ::
+  @spec cover?(slot :: Slot.t(), dt :: origin(), strict? :: boolean()) ::
           boolean()
   @doc """
   Checks whether to `Slot` covers the data/datetime passed as a second argument.
@@ -65,7 +68,7 @@ defmodule Tempus.Slot do
     do: DateTime.compare(from, dt) in [:lt, :eq] and DateTime.compare(to, dt) in [:gt, :eq]
 
   def cover?(%Slot{} = slot, %Date{} = dt, strict?),
-    do: cover?(slot, day(dt, slot.from), strict?)
+    do: cover?(slot, wrap(dt, slot.from), strict?)
 
   def cover?(%Slot{} = slot, %Slot{from: from, to: to}, strict?),
     do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
@@ -96,7 +99,7 @@ defmodule Tempus.Slot do
 
   ### Example
 
-      iex> Tempus.Slot.join([Tempus.Slot.day(~D|2020-09-30|), Tempus.Slot.day(~D|2020-10-02|)])
+      iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
       #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
   """
   def join(slots) do
@@ -139,20 +142,24 @@ defmodule Tempus.Slot do
     if disjoint?(s1, s2), do: compare(s1, s2), else: :joint
   end
 
-  @spec day(Date.t(), DateTime.t()) :: Slot.t()
+  @spec wrap(origin(), DateTime.t()) :: Slot.t()
   @doc """
-  Returns a `Slot` instance for a date given, starting at `00:00:00.000000` and
+  Wraps the argument into a slot. For `DateTime` it’d be a single microsecond.
+  For a `Date`, it would be the whole day, starting at `00:00:00.000000` and
       ending at `23:59:59:999999`.
 
   ## Examples
 
-      iex> Tempus.Slot.day(~D|2020-08-06|)
+      iex> Tempus.Slot.wrap(~D|2020-08-06|)
       #Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
   """
-  def day(
-        %Date{calendar: calendar, day: day, month: month, year: year},
-        ref \\ DateTime.utc_now()
-      ) do
+  def wrap(moment, origin \\ DateTime.utc_now())
+
+  def wrap(nil, origin), do: wrap(DateTime.utc_now(), origin)
+  def wrap(%Slot{} = slot, _), do: slot
+  def wrap(%DateTime{} = dt, _), do: %Slot{from: dt, to: dt}
+
+  def wrap(%Date{calendar: calendar, day: day, month: month, year: year}, origin) do
     %Slot{
       from: %DateTime{
         calendar: calendar,
@@ -162,11 +169,11 @@ defmodule Tempus.Slot do
         minute: 0,
         month: month,
         second: 0,
-        std_offset: ref.std_offset,
-        time_zone: ref.time_zone,
-        utc_offset: ref.utc_offset,
+        std_offset: origin.std_offset,
+        time_zone: origin.time_zone,
+        utc_offset: origin.utc_offset,
         year: year,
-        zone_abbr: ref.zone_abbr
+        zone_abbr: origin.zone_abbr
       },
       to: %DateTime{
         calendar: calendar,
@@ -176,14 +183,17 @@ defmodule Tempus.Slot do
         minute: 59,
         month: month,
         second: 59,
-        std_offset: ref.std_offset,
-        time_zone: ref.time_zone,
-        utc_offset: ref.utc_offset,
+        std_offset: origin.std_offset,
+        time_zone: origin.time_zone,
+        utc_offset: origin.utc_offset,
         year: year,
-        zone_abbr: ref.zone_abbr
+        zone_abbr: origin.zone_abbr
       }
     }
   end
+
+  def wrap(other, _),
+    do: raise(Tempus.ArgumentError, expected: "Tempus.Slot.origin()", passed: other)
 
   defimpl Inspect do
     import Inspect.Algebra
