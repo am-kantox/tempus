@@ -117,6 +117,45 @@ defmodule Tempus.Slots do
   def add(%Slots{}, other),
     do: raise(Tempus.ArgumentError, expected: Tempus.Slot, passed: other)
 
+  @spec inverse(slots :: Slots.t(), remainder :: :keep | :discard) :: Slots.t()
+  @doc """
+  Inverses `Slots` returning the new `Slots` instance with slots set where
+    there were blanks.
+
+  ### Example
+
+      iex> [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-08|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-12|),
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      ...> |> Tempus.Slots.inverse()
+      #Slots<[#Slot<[from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]]>]>
+  """
+  def inverse(%Slots{} = slots, remainder \\ :discard) do
+    result =
+      Enum.reduce(slots, {nil, %Slots{}}, fn
+        %Slot{} = slot, {nil, slots} ->
+          {slot, slots}
+
+        %Slot{} = this, {prev, slots} ->
+          if DateTime.diff(this.from, prev.to, :microsecond) <= 100,
+            do: {%Slot{prev | to: this.to}, slots},
+            else:
+              {this,
+               Slots.add(
+                 slots,
+                 %Slot{
+                   from: DateTime.add(prev.to, 1, :microsecond),
+                   to: DateTime.add(this.from, -1, :microsecond)
+                 }
+               )}
+      end)
+
+    if remainder == :keep, do: result, else: elem(result, 1)
+  end
+
   @spec less(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
   @doc false
   def less(%Slot{} = s1, %Slot{} = s2),

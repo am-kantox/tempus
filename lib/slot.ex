@@ -14,7 +14,7 @@ defmodule Tempus.Slot do
         }
 
   @typedoc "The origin used in comparisons and calculations"
-  @type origin :: Slot.t() | Date.t() | DateTime.t() | nil
+  @type origin :: Slot.t() | Date.t() | DateTime.t() | Time.t() | nil
 
   defstruct [:from, :to]
 
@@ -70,10 +70,13 @@ defmodule Tempus.Slot do
   def cover?(%Slot{} = slot, %Date{} = dt, strict?),
     do: cover?(slot, wrap(dt, slot.from), strict?)
 
+  def cover?(%Slot{} = slot, %Time{} = dt, strict?),
+    do: cover?(slot, wrap(dt, slot.from), strict?)
+
   def cover?(%Slot{} = slot, %Slot{from: from, to: to}, strict?),
     do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
 
-  @spec disjoint?(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
+  @spec disjoint?(s1 :: origin(), s2 :: origin()) :: boolean()
   @doc """
   Returns `true` if two slots are disjoined, `false` otherwise.
 
@@ -90,8 +93,10 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.disjoint?(slot, outer)
       true
   """
-  def disjoint?(%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}),
-    do: DateTime.compare(t1, f2) == :lt or DateTime.compare(f1, t2) == :gt
+  def disjoint?(s1, s2) do
+    [%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}] = Enum.map([s1, s2], &wrap/1)
+    DateTime.compare(t1, f2) == :lt or DateTime.compare(f1, t2) == :gt
+  end
 
   @spec join(slots :: Enum.t()) :: Slot.t()
   @doc """
@@ -158,6 +163,32 @@ defmodule Tempus.Slot do
   def wrap(nil, origin), do: wrap(DateTime.utc_now(), origin)
   def wrap(%Slot{} = slot, _), do: slot
   def wrap(%DateTime{} = dt, _), do: %Slot{from: dt, to: dt}
+
+  def wrap(
+        %Time{
+          calendar: calendar,
+          hour: hour,
+          microsecond: microsecond,
+          minute: minute,
+          second: second
+        },
+        origin
+      ) do
+    wrap(%DateTime{
+      calendar: calendar,
+      day: origin.day,
+      hour: hour,
+      microsecond: microsecond,
+      minute: minute,
+      month: origin.month,
+      second: second,
+      std_offset: origin.std_offset,
+      time_zone: origin.time_zone,
+      utc_offset: origin.utc_offset,
+      year: origin.year,
+      zone_abbr: origin.zone_abbr
+    })
+  end
 
   def wrap(%Date{calendar: calendar, day: day, month: month, year: year}, origin) do
     %Slot{
