@@ -115,6 +115,30 @@ defmodule Tempus.Slot do
     end)
   end
 
+  @spec compare(s1 :: t(), s2 :: t()) :: :lt | :gt | :eq
+  @doc """
+  Compares two slot structs.
+
+  Returns `:gt` if first slot is later than the second and `:lt` for vice versa.
+  If the two slots are equal `:eq` is returned.
+
+  Might be used in `Enum.sort/2`.
+  """
+  def compare(%Slot{} = s, %Slot{} = s), do: :eq
+
+  def compare(%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}) do
+    with :eq <- DateTime.compare(f1, f2), do: DateTime.compare(t1, t2)
+  end
+
+  @spec strict_compare(s1 :: Slot.t(), s2 :: Slot.t()) :: :eq | :lt | :gt | :joint
+  @doc """
+  Compares two slot structs. The same as `compare/2`, but returns `:joint` if
+  the slots are overlapped.
+  """
+  def strict_compare(%Slot{} = s1, %Slot{} = s2) do
+    if disjoint?(s1, s2), do: compare(s1, s2), else: :joint
+  end
+
   @spec day(Date.t(), DateTime.t()) :: Slot.t()
   @doc """
   Returns a `Slot` instance for a date given, starting at `00:00:00.000000` and

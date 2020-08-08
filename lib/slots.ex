@@ -31,9 +31,59 @@ defmodule Tempus.Slots do
 
   defstruct slots: @empty
 
-  # @spec merge(slots :: [Slot.t()]) :: [Slot.t()]
-  # def merge(slots) when is_list(slots) do
-  # end
+  @spec merge(this :: t(), other :: Enum.t()) :: t()
+  @doc """
+  Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
+  When `other` is a stream, it gets terminated immediately after the last element
+  in `this`.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   Tempus.Slot.day(~D|2020-08-07|),
+      ...>   Tempus.Slot.day(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> other = [
+      ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
+      ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
+      ...> ]
+      iex> Tempus.Slots.merge(slots, other)
+      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
+      iex> Tempus.Slots.merge(slots, Stream.map(other, & &1))
+      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
+
+  """
+  def merge(%Slots{slots: slots} = this, %Stream{} = other) do
+    case AVLTree.get_last(slots) do
+      nil ->
+        other
+        |> Enum.take(1)
+        |> case do
+          [] -> this
+          [%Slot{} = slot] -> add(this, slot)
+          [other] -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
+        end
+
+      %Slot{} = last ->
+        other
+        |> Stream.take_while(fn
+          %Slot{} = slot -> less(slot, last)
+          other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
+        end)
+        |> Enum.reduce(this, &add(&2, &1))
+    end
+  end
+
+  def merge(%Slots{} = this, %Slot{} = slot),
+    do: add(this, slot)
+
+  def merge(%Slots{} = this, other) do
+    if is_nil(Enumerable.impl_for(other)) do
+      raise Tempus.ArgumentError, expected: Enum, passed: other
+    end
+
+    Enum.reduce(other, this, &add(&2, &1))
+  end
 
   @spec add(t(), Slot.t()) :: t()
   @doc """
@@ -64,9 +114,13 @@ defmodule Tempus.Slots do
     }
   end
 
+  def add(%Slots{}, other),
+    do: raise(Tempus.ArgumentError, expected: Tempus.Slot, passed: other)
+
   @spec less(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
-  def less(%Slot{to: to}, %Slot{from: from}),
-    do: DateTime.compare(from, to) == :gt
+  @doc false
+  def less(%Slot{} = s1, %Slot{} = s2),
+    do: Slot.strict_compare(s1, s2) == :lt
 
   defimpl Enumerable do
     @moduledoc false
