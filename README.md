@@ -1,21 +1,15 @@
-# Tempus
+# ![Tempus](https://raw.githubusercontent.com/am-kantox/tempus/master/stuff/tempus-48x48.png) Tempus    [![Kantox ❤ OSS](https://img.shields.io/badge/❤-kantox_oss-informational.svg)](https://kantox.com/)  ![Test](https://github.com/am-kantox/tempus/workflows/Test/badge.svg)  ![Dialyzer](https://github.com/am-kantox/tempus/workflows/Dialyzer/badge.svg)
 
-**TODO: Add description**
+**Easy handling of time periods aka slots, like business days, holidays, etc.**
 
 ## Installation
-
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `tempus` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:tempus, "~> 0.1.0"}
+    {:tempus, "~> 0.1"}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/tempus](https://hexdocs.pm/tempus).
-
+## [Documentation](https://hexdocs.pm/tempus)

@@ -2,7 +2,7 @@ defmodule Tempus.MixProject do
   use Mix.Project
 
   @app :tempus
-  @version "0.9.4"
+  @version "0.1.0"
 
   def project do
     [
@@ -40,7 +40,7 @@ defmodule Tempus.MixProject do
       {:avl_tree, "~> 1.0"},
       # dev / test
       {:credo, "~> 1.0", only: [:dev, :ci]},
-      {:dialyxir, "~> 1.0", only: [:dev, :test, :ci], runtime: false},
+      {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
       {:ex_doc, "~> 0.11", only: :dev}
     ]
   end
