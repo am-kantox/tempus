@@ -226,6 +226,15 @@ defmodule Tempus.Slot do
   def wrap(other, _),
     do: raise(Tempus.ArgumentError, expected: "Tempus.Slot.origin()", passed: other)
 
+  @doc false
+  @spec shift(slot :: t(), action :: [{:to, integer()} | {:from, integer}]) :: Slot.t()
+  def shift(%Slot{from: from, to: to}, action \\ []) do
+    from = DateTime.add(from, Keyword.get(action, :from, 0), :microsecond)
+    to = DateTime.add(to, Keyword.get(action, :to, 0), :microsecond)
+
+    %Slot{from: from, to: to}
+  end
+
   defimpl Inspect do
     import Inspect.Algebra
 

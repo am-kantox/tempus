@@ -146,10 +146,7 @@ defmodule Tempus.Slots do
               {this,
                Slots.add(
                  slots,
-                 %Slot{
-                   from: DateTime.add(prev.to, 1, :microsecond),
-                   to: DateTime.add(this.from, -1, :microsecond)
-                 }
+                 Slot.shift(%Slot{from: prev.to, to: this.from}, from: 1, to: -1)
                )}
       end)
 
