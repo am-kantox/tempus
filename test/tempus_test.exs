@@ -6,6 +6,14 @@ defmodule Tempus.Test do
 
   alias Tempus.Slots
 
+  test "consuming stream" do
+    holidays = [~D|2020-08-06|, ~D|2020-08-13|]
+    weekends = Stream.map([~D|2020-08-08|, ~D|2020-08-20|], & &1)
+    schedule = holidays |> Enum.into(%Slots{}) |> Slots.merge(weekends)
+
+    assert Slots.size(schedule) == 3
+  end
+
   test "working days" do
     holidays = [~D|2020-08-06|, ~D|2020-08-13|]
     weekends = [~D|2020-08-08|, ~D|2020-08-09|]

@@ -7,7 +7,7 @@ defmodule Tempus do
 
   alias Tempus.{Slot, Slots}
 
-  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean()
+  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean() | no_return
   @doc """
   Checks whether the slot is disjoined against slots.
 
@@ -23,10 +23,10 @@ defmodule Tempus do
       true
   """
   def free?(%Slots{} = slots, slot) do
-    AVLTree.size(Slots.add(slots, Slot.wrap(slot)).slots) == AVLTree.size(slots.slots) + 1
+    Slots.size(Slots.add(slots, Slot.wrap(slot))) == Slots.size(slots) + 1
   end
 
-  @spec days_ahead(slots :: Stots.t(), origin :: Date.t(), count :: integer()) :: Date.t()
+  @spec days_ahead(slots :: Slots.t(), origin :: Date.t(), count :: integer()) :: Date.t()
   @doc """
   Returns the reversed list of free days after origin.
 

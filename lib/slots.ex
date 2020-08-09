@@ -31,6 +31,10 @@ defmodule Tempus.Slots do
 
   @type t :: %Slots{slots: avl_tree()}
 
+  @spec size(t()) :: integer()
+  @doc "Returns the number of slots"
+  def size(%Slots{slots: slots}), do: AVLTree.size(slots)
+
   @spec merge(this :: t(), other :: Enum.t()) :: t()
   @doc """
   Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
@@ -60,16 +64,12 @@ defmodule Tempus.Slots do
         |> Enum.take(1)
         |> case do
           [] -> this
-          [%Slot{} = slot] -> add(this, slot)
-          [other] -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
+          [slot] -> add(this, Slot.wrap(slot))
         end
 
       %Slot{} = last ->
         other
-        |> Stream.take_while(fn
-          %Slot{} = slot -> less(slot, last)
-          other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
-        end)
+        |> Stream.take_while(&(&1 |> Slot.wrap() |> less(last)))
         |> Enum.reduce(this, &add(&2, &1))
     end
   end
