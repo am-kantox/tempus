@@ -9,8 +9,8 @@ defmodule Tempus.Slot do
 
   @typedoc "A timeslot to be used in `Tempus`"
   @type t :: %__MODULE__{
-          from: DateTime.t(),
-          to: DateTime.t()
+          from: nil | DateTime.t(),
+          to: nil | DateTime.t()
         }
 
   @typedoc "The origin used in comparisons and calculations"
@@ -227,10 +227,14 @@ defmodule Tempus.Slot do
     do: raise(Tempus.ArgumentError, expected: "Tempus.Slot.origin()", passed: other)
 
   @doc false
-  @spec shift(slot :: t(), action :: [{:to, integer()} | {:from, integer}]) :: Slot.t()
-  def shift(%Slot{from: from, to: to}, action \\ []) do
-    from = DateTime.add(from, Keyword.get(action, :from, 0), :microsecond)
-    to = DateTime.add(to, Keyword.get(action, :to, 0), :microsecond)
+  @spec shift(
+          slot :: t(),
+          action :: [{:to, integer()} | {:from, integer}],
+          unit :: System.time_unit()
+        ) :: Slot.t()
+  def shift(%Slot{from: from, to: to}, action \\ [], unit \\ :microsecond) do
+    from = from && DateTime.add(from, Keyword.get(action, :from, 0), unit)
+    to = to && DateTime.add(to, Keyword.get(action, :to, 0), unit)
 
     %Slot{from: from, to: to}
   end

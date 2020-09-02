@@ -28,4 +28,25 @@ defmodule Tempus.Test do
     plus_zero_wdays = Tempus.days_ahead(schedule, ~D|2020-08-06|, 0)
     assert Date.from_iso8601!("2020-08-07") == hd(plus_zero_wdays)
   end
+
+  test "add/4" do
+    slots =
+      [
+        Tempus.Slot.wrap(~D|2020-08-07|),
+        %Tempus.Slot{
+          from: ~U|2020-08-08 01:01:00Z|,
+          to: ~U|2020-08-08 01:02:00Z|
+        },
+        %Tempus.Slot{
+          from: ~U|2020-08-08 01:03:00Z|,
+          to: ~U|2020-08-08 01:04:00Z|
+        }
+      ]
+      |> Enum.into(%Tempus.Slots{})
+
+    origin = ~U|2020-08-08 01:02:30Z|
+
+    assert ~U|2020-08-08 01:02:40Z| == Tempus.add(slots, origin, 10, :second)
+    assert ~U|2020-08-08 01:04:10Z| == Tempus.add(slots, origin, 40_000_000, :microsecond)
+  end
 end
