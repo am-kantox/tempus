@@ -12,4 +12,8 @@ def deps do
 end
 ```
 
+## Changelog
+
+* **`0.2.0`** — many improvements, `Tempus.add/2` similar to `DateTime.add/4` but considering slots
+
 ## [Documentation](https://hexdocs.pm/tempus)
