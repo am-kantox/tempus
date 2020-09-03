@@ -35,7 +35,7 @@ defmodule Tempus.Slots do
   @doc "Returns the number of slots"
   def size(%Slots{slots: slots}), do: AVLTree.size(slots)
 
-  @spec merge(this :: t(), other :: Enum.t()) :: t()
+  @spec merge(this :: t(), other :: Enumerable.t()) :: t()
   @doc """
   Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
   When `other` is a stream, it gets terminated immediately after the last element
@@ -57,7 +57,25 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
 
   """
-  def merge(%Slots{slots: slots} = this, %Stream{} = other) do
+  def merge(%Slots{} = this, %Stream{} = other),
+    do: do_merge_stream(this, other)
+
+  def merge(%Slots{} = this, other) when is_function(other),
+    do: do_merge_stream(this, other)
+
+  def merge(%Slots{} = this, %Slot{} = slot),
+    do: add(this, slot)
+
+  def merge(%Slots{} = this, other) do
+    if is_nil(Enumerable.impl_for(other)) do
+      raise Tempus.ArgumentError, expected: Enum, passed: other
+    end
+
+    Enum.reduce(other, this, &add(&2, &1))
+  end
+
+  @spec do_merge_stream(this :: t(), other :: Enumerable.t()) :: t()
+  defp do_merge_stream(%Slots{slots: slots} = this, other) do
     case AVLTree.get_last(slots) do
       nil ->
         other
@@ -72,17 +90,6 @@ defmodule Tempus.Slots do
         |> Stream.take_while(&(&1 |> Slot.wrap() |> less(last)))
         |> Enum.reduce(this, &add(&2, &1))
     end
-  end
-
-  def merge(%Slots{} = this, %Slot{} = slot),
-    do: add(this, slot)
-
-  def merge(%Slots{} = this, other) do
-    if is_nil(Enumerable.impl_for(other)) do
-      raise Tempus.ArgumentError, expected: Enum, passed: other
-    end
-
-    Enum.reduce(other, this, &add(&2, &1))
   end
 
   @spec add(t(), Slot.origin()) :: t() | no_return

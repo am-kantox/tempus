@@ -14,6 +14,7 @@ end
 
 ## Changelog
 
+* **`0.2.1`** — saccept function as well as stream in `Slots.merge/2`
 * **`0.2.0`** — many improvements, `Tempus.add/2` similar to `DateTime.add/4` but considering slots
 
 ## [Documentation](https://hexdocs.pm/tempus)
