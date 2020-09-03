@@ -10,7 +10,7 @@ defmodule Tempus do
   @type direction :: :fwd | :bwd
   @type option :: {:origin, Slot.origin()} | {:count, integer()} | {:direction, direction()}
   @type options :: [option()]
-  @typep options_tuple :: {Slot.origin(), integer(), 1 | -1}
+  @typep options_tuple :: {Slot.origin(), :infinity | non_neg_integer(), 1 | -1}
 
   @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean() | no_return
   @doc """
@@ -27,9 +27,8 @@ defmodule Tempus do
       iex> Tempus.free?(slots, ~D|2020-08-08|)
       true
   """
-  def free?(%Slots{} = slots, slot) do
-    Slots.size(Slots.add(slots, Slot.wrap(slot))) == Slots.size(slots) + 1
-  end
+  def free?(%Slots{} = slots, slot),
+    do: Slots.size(Slots.add(slots, Slot.wrap(slot))) == Slots.size(slots) + 1
 
   @spec days_add(slots :: Slots.t(), opts :: options()) :: Date.t()
   @doc since: "0.2.0"
@@ -160,7 +159,11 @@ defmodule Tempus do
         other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
       end)
 
-    if count == 0, do: List.first(result), else: Enum.take(result, count)
+    case count do
+      :infinity -> result
+      0 -> List.first(result)
+      count when is_integer(count) -> Enum.take(result, count)
+    end
   end
 
   @spec next_free(Slots.t(), options()) :: [Slot.t()] | Slot.t() | no_return
@@ -181,6 +184,10 @@ defmodule Tempus do
       #Slot<[from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|})
       #Slot<[from: ~U[2020-08-06 11:00:00Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      iex> Tempus.next_free(slots, origin: ~U|2020-08-13 01:00:00.000000Z|)
+      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
+      iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
+      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
       iex> Tempus.next_free(slots, origin: ~D|2020-08-14|)
       #Slot<[from: ~U[2020-08-15 00:00:00.000000Z], to: nil]>
       iex> Tempus.next_free(slots, origin: ~D|2020-08-07|, count: 5)
@@ -192,15 +199,21 @@ defmodule Tempus do
       ]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-15|, count: -5)
       [
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: ~U[2020-08-15 23:59:59.999999Z]},
         %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: ~U[2020-08-15 23:59:59.999999Z]}
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
+        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
+      ]
+      iex> Tempus.next_free(slots, origin: ~D|2020-08-12|, count: :infinity, direction: :bwd)
+      [
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
+        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
       ]
   """
   def next_free(slots, opts \\ []) do
-    {origin, _count, iterator} = options(opts)
+    {origin, count, iterator} = options(opts)
     {first, last} = {AVLTree.get_first(slots.slots), AVLTree.get_last(slots.slots)}
 
     slots =
@@ -224,12 +237,12 @@ defmodule Tempus do
     prev = Slot.shift(%Slot{to: first.from}, to: -1)
     next = Slot.shift(%Slot{from: last.to}, from: 1)
 
-    case {iterator, slots} do
-      {_, [%Slot{} = slot]} -> slot
-      {-1, []} -> prev
-      {1, []} -> next
-      {-1, slots} when is_list(slots) -> [prev | Enum.reverse(slots)]
-      {1, slots} when is_list(slots) -> slots ++ [next]
+    case {count, iterator, slots} do
+      {0, _, [%Slot{} = slot]} -> slot
+      {0, -1, []} -> prev
+      {0, 1, []} -> next
+      {_, -1, slots} when is_list(slots) -> slots ++ [prev]
+      {_, 1, slots} when is_list(slots) -> slots ++ [next]
     end
   end
 
@@ -242,8 +255,21 @@ defmodule Tempus do
           amount_to_add :: integer(),
           unit :: System.time_unit()
         ) :: DateTime.t()
-  def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second) do
+  def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second)
+      when amount_to_add >= 0 do
     amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
+
+    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
+
+    [%Slot{slot | from: origin} | slots]
+    |> Enum.reduce_while(amount_in_μs, fn %Slot{} = slot, rest_to_add_in_μs ->
+      maybe_result = DateTime.add(slot.from, rest_to_add_in_μs, :microsecond)
+
+      if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
+        do: {:halt, maybe_result},
+        else: {:cont, rest_to_add_in_μs - Slot.duration(slot, :microsecond)}
+    end)
+    |> DateTime.truncate(unit)
   end
 
   @spec options(opts :: options()) :: options_tuple()
@@ -253,14 +279,18 @@ defmodule Tempus do
       |> Keyword.get(:origin, DateTime.utc_now())
       |> Slot.wrap()
 
-    count = Keyword.get(opts, :count, 0)
+    case Keyword.get(opts, :count, 0) do
+      :infinity ->
+        {origin, :infinity, if(Keyword.get(opts, :direction, :fwd) == :bwd, do: -1, else: 1)}
 
-    unless is_integer(count),
-      do: raise(Tempus.ArgumentError, expected: Integer, passed: count)
+      count when is_integer(count) ->
+        iterator =
+          if :erlang.xor(count < 0, Keyword.get(opts, :direction, :fwd) == :bwd), do: -1, else: 1
 
-    iterator =
-      if :erlang.xor(count < 0, Keyword.get(opts, :direction, :fwd) == :bwd), do: -1, else: 1
+        {origin, abs(count), iterator}
 
-    {origin, abs(count), iterator}
+      other ->
+        raise(Tempus.ArgumentError, expected: Integer, passed: other)
+    end
   end
 end

@@ -98,6 +98,44 @@ defmodule Tempus.Slot do
     DateTime.compare(t1, f2) == :lt or DateTime.compare(f1, t2) == :gt
   end
 
+  @spec intersect(slots :: Enum.t()) :: Slot.t() | nil
+  @doc """
+  Intersects slots to the minimal covered timeslice.
+
+  ### Example
+
+      iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
+      ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
+      #Slot<[from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]]>
+  """
+  def intersect(slots) do
+    Enum.reduce(slots, fn
+      _slot, nil ->
+        nil
+
+      slot, acc ->
+        slot = wrap(slot)
+
+        if not Enum.any?([acc.from, acc.to, slot.from, slot.to], &is_nil/1) and
+             (DateTime.compare(acc.from, slot.to) == :gt or
+                DateTime.compare(acc.to, slot.from) == :lt),
+           do: nil,
+           else: %Slot{from: intersect_from(slot, acc), to: intersect_to(slot, acc)}
+    end)
+  end
+
+  @spec intersect_from(Slot.t(), Slot.t()) :: DateTime.t() | nil
+  defp intersect_from(%Slot{from: nil}, %Slot{from: nil}), do: nil
+  defp intersect_from(%Slot{from: f1}, %Slot{from: nil}), do: f1
+  defp intersect_from(%Slot{from: nil}, %Slot{from: f2}), do: f2
+  defp intersect_from(%Slot{from: f1}, %Slot{from: f2}), do: Enum.max([f1, f2], DateTime)
+
+  @spec intersect_to(Slot.t(), Slot.t()) :: DateTime.t() | nil
+  defp intersect_to(%Slot{to: nil}, %Slot{to: nil}), do: nil
+  defp intersect_to(%Slot{to: t1}, %Slot{to: nil}), do: t1
+  defp intersect_to(%Slot{to: nil}, %Slot{to: t2}), do: t2
+  defp intersect_to(%Slot{to: t1}, %Slot{to: t2}), do: Enum.min([t1, t2], DateTime)
+
   @spec join(slots :: Enum.t()) :: Slot.t()
   @doc """
   Joins slots to the maximal covered timeslice.
@@ -122,6 +160,19 @@ defmodule Tempus.Slot do
       %Slot{from: from, to: to}
     end)
   end
+
+  @spec duration(slot :: Slot.t(), unit :: System.time_unit()) :: non_neg_integer()
+  @doc """
+  Calculates the duration of a slot in units given as a second parameter
+    (default: `:second`.)
+
+  ### Example
+
+      iex> ~D|2020-09-03| |> Tempus.Slot.wrap() |> Tempus.Slot.duration()
+      86400
+  """
+  def duration(%Slot{from: from, to: to}, unit \\ :second),
+    do: to |> DateTime.add(1, unit) |> DateTime.diff(from, unit)
 
   @spec compare(s1 :: t(), s2 :: t()) :: :lt | :gt | :eq
   @doc """
