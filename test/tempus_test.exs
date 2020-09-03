@@ -33,22 +33,42 @@ defmodule Tempus.Test do
     slots =
       [
         Tempus.Slot.wrap(~D|2020-08-07|),
-        %Tempus.Slot{
-          from: ~U|2020-08-08 01:01:00Z|,
-          to: ~U|2020-08-08 01:02:00Z|
-        },
-        %Tempus.Slot{
-          from: ~U|2020-08-08 01:03:00Z|,
-          to: ~U|2020-08-08 01:04:00Z|
-        }
+        Tempus.Slot.shift(
+          %Tempus.Slot{
+            from: ~U|2020-08-08 01:01:00Z|,
+            to: ~U|2020-08-08 01:02:00Z|
+          },
+          to: -1,
+          unit: :microsecond
+        ),
+        Tempus.Slot.shift(
+          %Tempus.Slot{
+            from: ~U|2020-08-08 01:03:00Z|,
+            to: ~U|2020-08-08 01:04:00Z|
+          },
+          to: -1,
+          unit: :microsecond
+        )
       ]
       |> Enum.into(%Tempus.Slots{})
 
+    assert ~U|2020-08-08 01:02:00Z| ==
+             Tempus.add(slots, ~U|2020-08-08 01:01:30Z|, 0, :second)
+
     origin = ~U|2020-08-08 01:02:30Z|
 
+    assert ~U|2020-08-08 01:02:30Z| == Tempus.add(slots, origin, 0, :second)
     assert ~U|2020-08-08 01:02:40Z| == Tempus.add(slots, origin, 10, :second)
 
-    assert %DateTime{~U|2020-08-08 01:04:10Z| | microsecond: {1, 0}} ==
+    assert ~U|2020-08-08 01:04:10.000000Z| ==
              Tempus.add(slots, origin, 40_000_000, :microsecond)
+
+    assert ~U|2020-08-08 01:02:20Z| == Tempus.add(slots, origin, -10, :second)
+
+    assert ~U|2020-08-08 01:00:50Z| ==
+             Tempus.add(slots, origin, -40, :second)
+
+    assert ~U|2020-08-08 01:00:50.000000Z| ==
+             Tempus.add(slots, origin, -40_000_000, :microsecond)
   end
 end

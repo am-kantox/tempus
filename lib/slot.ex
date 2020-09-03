@@ -280,15 +280,31 @@ defmodule Tempus.Slot do
   @doc false
   @spec shift(
           slot :: t(),
-          action :: [{:to, integer()} | {:from, integer}],
-          unit :: System.time_unit()
+          action :: [{:to, integer()} | {:from, integer} | {:unit, System.time_unit()}]
         ) :: Slot.t()
-  def shift(%Slot{from: from, to: to}, action \\ [], unit \\ :microsecond) do
-    from = from && DateTime.add(from, Keyword.get(action, :from, 0), unit)
-    to = to && DateTime.add(to, Keyword.get(action, :to, 0), unit)
+  def shift(%Slot{from: from, to: to}, action \\ []) do
+    unit = Keyword.get(action, :unit, :microsecond)
+    from = do_shift(from, Keyword.get(action, :from, 0), unit)
+    to = do_shift(to, Keyword.get(action, :to, 0), unit)
 
     %Slot{from: from, to: to}
   end
+
+  @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
+        when maybe_datetime: nil | DateTime.t()
+  defp do_shift(nil, _, _), do: nil
+
+  defp do_shift(%DateTime{microsecond: {_, 0}} = dt, count, unit),
+    do:
+      %DateTime{dt | microsecond: {0, 6}}
+      |> DateTime.truncate(unit)
+      |> DateTime.add(count, unit)
+
+  defp do_shift(%DateTime{microsecond: {value, n}} = dt, count, unit),
+    do:
+      %DateTime{dt | microsecond: {:erlang.rem(value, round(:math.pow(10, n))), Enum.max([6, 6])}}
+      |> DateTime.truncate(unit)
+      |> DateTime.add(count, unit)
 
   defimpl Inspect do
     import Inspect.Algebra

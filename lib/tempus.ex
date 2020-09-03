@@ -183,7 +183,7 @@ defmodule Tempus do
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
       #Slot<[from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-06 11:00:00Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      #Slot<[from: ~U[2020-08-06 11:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
       iex> Tempus.next_free(slots, origin: ~U|2020-08-13 01:00:00.000000Z|)
       #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
       iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
@@ -256,7 +256,16 @@ defmodule Tempus do
           unit :: System.time_unit()
         ) :: DateTime.t()
   def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second)
-      when amount_to_add >= 0 do
+
+  def add(slots, origin, 0, unit) do
+    %{from: from} = next_free(slots, origin: origin)
+
+    [from, origin]
+    |> Enum.max(DateTime)
+    |> DateTime.truncate(unit)
+  end
+
+  def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
     amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
     [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
@@ -268,6 +277,22 @@ defmodule Tempus do
       if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
         do: {:halt, maybe_result},
         else: {:cont, rest_to_add_in_μs - Slot.duration(slot, :microsecond)}
+    end)
+    |> DateTime.truncate(unit)
+  end
+
+  def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
+    amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
+
+    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :bwd)
+
+    [%Slot{slot | to: origin} | slots]
+    |> Enum.reduce_while(amount_in_μs, fn %Slot{} = slot, rest_to_add_in_μs ->
+      maybe_result = DateTime.add(slot.to, rest_to_add_in_μs, :microsecond)
+
+      if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
+        do: {:halt, maybe_result},
+        else: {:cont, rest_to_add_in_μs + Slot.duration(slot, :microsecond)}
     end)
     |> DateTime.truncate(unit)
   end
