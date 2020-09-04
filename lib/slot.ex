@@ -290,6 +290,32 @@ defmodule Tempus.Slot do
     %Slot{from: from, to: to}
   end
 
+  @spec shift_tz(
+          slot :: Slot.t(),
+          tz :: Calendar.time_zone(),
+          tz_db :: Calendar.time_zone_database()
+        ) :: Slot.t()
+  @doc """
+  Shifts both `from` and `to` values to `UTC` zone.
+
+  ### Examples
+
+  ```elixir
+  slot = %Tempus.Slot{
+     from: DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York"),
+     to: DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
+  }
+  #⇒ #Slot<[from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]]>
+  ```
+  """
+  def shift_tz(
+        %Slot{from: from, to: to},
+        tz \\ "Etc/UTC",
+        tz_db \\ Calendar.get_time_zone_database()
+      ) do
+    %Slot{from: DateTime.shift_zone!(from, tz, tz_db), to: DateTime.shift_zone!(to, tz, tz_db)}
+  end
+
   @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
         when maybe_datetime: nil | DateTime.t()
   defp do_shift(nil, _, _), do: nil
