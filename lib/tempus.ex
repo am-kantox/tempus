@@ -218,6 +218,9 @@ defmodule Tempus do
 
     slots =
       cond do
+        is_nil(first) or is_nil(last) ->
+          slots
+
         DateTime.compare(first.from, origin.to) == :gt ->
           Slots.add(
             slots,
