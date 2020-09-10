@@ -212,15 +212,20 @@ defmodule Tempus do
         %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
       ]
   """
-  def next_free(slots, opts \\ []) do
-    {origin, count, iterator} = options(opts)
+  def next_free(%Slots{} = slots, opts \\ []),
+    do: do_next_free(Slots.size(slots), slots, {opts, options(opts)})
+
+  def do_next_free(0, _slots, {_opts, {origin, _count, -1}}),
+    do: [%Slot{from: nil, to: origin}]
+
+  def do_next_free(0, _slots, {_opts, {origin, _count, 1}}),
+    do: [%Slot{from: origin, to: nil}]
+
+  def do_next_free(size, slots, {opts, {origin, count, iterator}}) when size > 0 do
     {first, last} = {AVLTree.get_first(slots.slots), AVLTree.get_last(slots.slots)}
 
     slots =
       cond do
-        is_nil(first) or is_nil(last) ->
-          slots
-
         DateTime.compare(first.from, origin.to) == :gt ->
           Slots.add(
             slots,

@@ -70,5 +70,11 @@ defmodule Tempus.Test do
 
     assert ~U|2020-08-08 01:00:50.000000Z| ==
              Tempus.add(slots, origin, -40_000_000, :microsecond)
+
+    assert DateTime.add(origin, 1_000) ==
+             Tempus.add(%Slots{}, origin, 1_000, :second)
+
+    assert DateTime.add(origin, -1_000) ==
+             Tempus.add(%Slots{}, origin, -1_000, :second)
   end
 end
