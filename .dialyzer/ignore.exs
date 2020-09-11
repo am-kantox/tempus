@@ -5,7 +5,7 @@
   {"lib/tempus.ex", :no_return, 30},
   {"lib/tempus.ex", :call, 31},
   {"lib/tempus.ex", :call, 149},
-  {"lib/tempus.ex", :no_return, 258},
-  {"lib/tempus.ex", :no_return, 260},
-  {"lib/tempus.ex", :call, 264}
+  {"lib/tempus.ex", :no_return, 266},
+  {"lib/tempus.ex", :no_return, 268},
+  {"lib/tempus.ex", :call, 272}
 ]
