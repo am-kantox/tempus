@@ -132,8 +132,8 @@ defmodule Tempus.Slot do
       true
   """
   def disjoint?(s1, s2) do
-    [%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}] = Enum.map([s1, s2], &wrap/1)
-    DateTime.compare(t1, f2) == :lt or DateTime.compare(f1, t2) == :gt
+    [%Slot{} = s1, %Slot{} = s2] = Enum.map([s1, s2], &wrap/1)
+    compare(s1, s2) in [:lt, :gt]
   end
 
   @spec intersect(slots :: Enum.t()) :: Slot.t() | nil
@@ -154,11 +154,9 @@ defmodule Tempus.Slot do
       slot, acc ->
         slot = wrap(slot)
 
-        if not Enum.any?([acc.from, acc.to, slot.from, slot.to], &is_nil/1) and
-             (DateTime.compare(acc.from, slot.to) == :gt or
-                DateTime.compare(acc.to, slot.from) == :lt),
-           do: nil,
-           else: %Slot{from: intersect_from(slot, acc), to: intersect_to(slot, acc)}
+        if disjoint?(acc, slot),
+          do: nil,
+          else: %Slot{from: intersect_from(slot, acc), to: intersect_to(slot, acc)}
     end)
   end
 
@@ -199,7 +197,7 @@ defmodule Tempus.Slot do
     end)
   end
 
-  @spec duration(slot :: Slot.t(), unit :: System.time_unit()) :: non_neg_integer()
+  @spec duration(slot :: Slot.t(), unit :: System.time_unit()) :: non_neg_integer() | :infinity
   @doc """
   Calculates the duration of a slot in units given as a second parameter
     (default: `:second`.)
@@ -209,22 +207,69 @@ defmodule Tempus.Slot do
       iex> ~D|2020-09-03| |> Tempus.Slot.wrap() |> Tempus.Slot.duration()
       86400
   """
-  def duration(%Slot{from: from, to: to}, unit \\ :second),
+  def duration(slot, unit \\ :second)
+  def duration(%Slot{from: nil, to: %DateTime{}}, _), do: :infinity
+  def duration(%Slot{from: %DateTime{}, to: nil}, _), do: :infinity
+
+  def duration(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}, unit),
     do: to |> DateTime.add(1, unit) |> DateTime.diff(from, unit)
 
-  @spec compare(s1 :: t(), s2 :: t()) :: :lt | :gt | :eq
+  @spec compare(s1 :: t(), s2 :: t(), strict :: boolean()) :: :lt | :gt | :eq | :joint
   @doc """
   Compares two slot structs.
 
-  Returns `:gt` if first slot is later than the second and `:lt` for vice versa.
-  If the two slots are equal `:eq` is returned.
+  Returns `:gt` if first slot is strictly later than the second and `:lt` for vice versa.
+  **NB** `:eq` is returned not only if slots are equal, but also when they are overlapped.
 
   Might be used in `Enum.sort/2`.
   """
-  def compare(%Slot{} = s, %Slot{} = s), do: :eq
+  def compare(s1, s2, strict \\ false)
 
-  def compare(%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}) do
-    with :eq <- DateTime.compare(f1, f2), do: DateTime.compare(t1, t2)
+  def compare(%Slot{from: nil, to: %DateTime{}}, %Slot{from: nil, to: %DateTime{}}, false),
+    do: :eq
+
+  def compare(
+        %Slot{from: nil, to: %DateTime{} = t1},
+        %Slot{from: nil, to: %DateTime{} = t2},
+        true
+      ),
+      do: if(DateTime.compare(t1, t2) == :eq, do: :eq, else: :joint)
+
+  def compare(%Slot{from: %DateTime{}, to: nil}, %Slot{from: %DateTime{}, to: nil}, false),
+    do: :eq
+
+  def compare(
+        %Slot{from: %DateTime{} = f1, to: nil},
+        %Slot{from: %DateTime{} = f2, to: nil},
+        true
+      ),
+      do: if(DateTime.compare(f1, f2) == :eq, do: :eq, else: :joint)
+
+  def compare(%Slot{from: f1, to: t1}, %Slot{from: f2, to: t2}, strict) do
+    f2l = t1 && f2 && DateTime.compare(t1, f2)
+    l2f = f1 && t2 && DateTime.compare(f1, t2)
+
+    case {strict, f2l, l2f} do
+      {_, :lt, _} ->
+        :lt
+
+      {_, _, :gt} ->
+        :gt
+
+      {false, _, _} ->
+        :eq
+
+      {true, nil, _} ->
+        :joint
+
+      {true, _, nil} ->
+        :joint
+
+      {true, _, _} ->
+        if DateTime.compare(f1, f2) == :eq && DateTime.compare(t1, t2) == :eq,
+          do: :eq,
+          else: :joint
+    end
   end
 
   @spec strict_compare(s1 :: Slot.t(), s2 :: Slot.t()) :: :eq | :lt | :gt | :joint
@@ -232,9 +277,8 @@ defmodule Tempus.Slot do
   Compares two slot structs. The same as `compare/2`, but returns `:joint` if
   the slots are overlapped.
   """
-  def strict_compare(%Slot{} = s1, %Slot{} = s2) do
-    if disjoint?(s1, s2), do: compare(s1, s2), else: :joint
-  end
+  def strict_compare(%Slot{} = s1, %Slot{} = s2),
+    do: compare(s1, s2, true)
 
   @spec wrap(origin(), DateTime.t()) :: Slot.t()
   @doc """
