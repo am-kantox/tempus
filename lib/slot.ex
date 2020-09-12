@@ -30,8 +30,13 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.valid?(%Tempus.Slot{from: slot.to, to: slot.from})
       false
   """
-  def valid?(%Slot{from: from, to: to}),
+  def valid?(%Slot{from: nil, to: %DateTime{}}), do: true
+  def valid?(%Slot{from: %DateTime{}, to: nil}), do: true
+
+  def valid?(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}),
     do: DateTime.compare(from, to) != :gt
+
+  def valid?(_), do: false
 
   @spec cover?(slot :: Slot.t(), dt :: origin(), strict? :: boolean()) ::
           boolean()
@@ -61,20 +66,53 @@ defmodule Tempus.Slot do
   """
   def cover?(slot, dt, strict? \\ false)
 
-  def cover?(%Slot{from: from, to: to}, %DateTime{} = dt, true),
+  def cover?(%Slot{from: nil, to: %DateTime{} = to}, %DateTime{} = dt, true),
+    do: DateTime.compare(to, dt) == :gt
+
+  def cover?(%Slot{from: %DateTime{} = from, to: nil}, %DateTime{} = dt, true),
+    do: DateTime.compare(from, dt) == :lt
+
+  def cover?(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}, %DateTime{} = dt, true),
     do: DateTime.compare(from, dt) == :lt and DateTime.compare(to, dt) == :gt
 
-  def cover?(%Slot{from: from, to: to}, %DateTime{} = dt, false),
-    do: DateTime.compare(from, dt) in [:lt, :eq] and DateTime.compare(to, dt) in [:gt, :eq]
+  def cover?(%Slot{from: from, to: to} = slot, %DateTime{} = dt, false),
+    do:
+      cover?(slot, dt, true) or
+        (from && DateTime.compare(from, dt) == :eq) or
+        (from && DateTime.compare(to, dt) == :eq)
 
   def cover?(%Slot{} = slot, %Date{} = dt, strict?),
-    do: cover?(slot, wrap(dt, slot.from), strict?)
+    do: cover?(slot, wrap(dt, slot.from || slot.to), strict?)
 
   def cover?(%Slot{} = slot, %Time{} = dt, strict?),
-    do: cover?(slot, wrap(dt, slot.from), strict?)
+    do: cover?(slot, wrap(dt, slot.from || slot.to), strict?)
 
-  def cover?(%Slot{} = slot, %Slot{from: from, to: to}, strict?),
-    do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
+  def cover?(%Slot{from: nil, to: %DateTime{}}, %Slot{from: nil, to: %DateTime{}}, true),
+    do: false
+
+  def cover?(
+        %Slot{from: nil, to: %DateTime{} = s_to},
+        %Slot{from: nil, to: %DateTime{} = dt_to},
+        false
+      ),
+      do: DateTime.compare(s_to, dt_to) in [:lt, :eq]
+
+  def cover?(%Slot{from: %DateTime{}, to: nil}, %Slot{from: %DateTime{}, to: nil}, true),
+    do: false
+
+  def cover?(
+        %Slot{from: %DateTime{} = s_from, to: nil},
+        %Slot{from: %DateTime{} = dt_from, to: nil},
+        false
+      ),
+      do: DateTime.compare(s_from, dt_from) in [:gt, :eq]
+
+  def cover?(
+        %Slot{from: %DateTime{}, to: %DateTime{}} = slot,
+        %Slot{from: %DateTime{} = from, to: %DateTime{} = to},
+        strict?
+      ),
+      do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
 
   @spec disjoint?(s1 :: origin(), s2 :: origin()) :: boolean()
   @doc """
@@ -273,9 +311,6 @@ defmodule Tempus.Slot do
       }
     }
   end
-
-  def wrap(other, _),
-    do: raise(Tempus.ArgumentError, expected: "Tempus.Slot.origin()", passed: other)
 
   @doc false
   @spec shift(
