@@ -20,7 +20,7 @@ defmodule Tempus.Slots do
 
   @empty AVLTree.new(&Slots.less/2)
 
-  defstruct slots: @empty
+  defstruct slots: []
 
   @typedoc "AVL Tree specialized for `Tempus` slots type"
   @type avl_tree :: %AVLTree{
@@ -29,11 +29,15 @@ defmodule Tempus.Slots do
           less: (Slot.t(), Slot.t() -> boolean())
         }
 
-  @type t :: %Slots{slots: avl_tree()}
+  @type t :: %Slots{slots: [Slot.t()]}
 
   @spec size(t()) :: integer()
   @doc "Returns the number of slots"
-  def size(%Slots{slots: slots}), do: AVLTree.size(slots)
+  def size(%Slots{slots: slots}), do: length(slots)
+
+  @spec avl_tree(t()) :: avl_tree()
+  @doc "Returns the AVL Tree instance of slots"
+  def avl_tree(%Slots{slots: slots}), do: Enum.into(slots, @empty)
 
   @spec merge(this :: t(), other :: Enumerable.t()) :: t()
   @doc """
@@ -75,24 +79,19 @@ defmodule Tempus.Slots do
   end
 
   @spec do_merge_stream(this :: t(), other :: Enumerable.t()) :: t()
-  defp do_merge_stream(%Slots{slots: slots} = this, other) do
-    case AVLTree.get_last(slots) do
-      nil ->
-        other
-        |> Enum.take(1)
-        |> case do
-          [] -> this
-          [slot] -> add(this, Slot.wrap(slot))
-        end
+  defp do_merge_stream(%Slots{slots: []}, other),
+    do: %Slots{slots: Enum.take(other, 1)}
 
-      %Slot{} = last ->
-        other
-        |> Stream.take_while(&(&1 |> Slot.wrap() |> less(last)))
-        |> Enum.reduce(this, &add(&2, &1))
-    end
+  defp do_merge_stream(%Slots{slots: slots} = this, other) do
+    other =
+      other
+      |> Stream.take_while(&(&1 |> Slot.wrap() |> less(List.last(slots))))
+      |> Enum.to_list()
+
+    merge(this, other)
   end
 
-  @spec add(t(), Slot.origin()) :: t() | no_return
+  @spec add(t(), Slot.origin()) :: t()
   @doc """
   Adds another slot to the slots collection.
 
@@ -110,16 +109,28 @@ defmodule Tempus.Slots do
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
+  def add(%Slots{slots: []}, slot),
+    do: %Slots{slots: [Slot.wrap(slot)]}
+
   def add(%Slots{slots: slots}, slot) do
     slot = Slot.wrap(slot)
-    {slots, joint} = Enum.split_with(slots, &Slot.disjoint?(&1, slot))
 
-    %Slots{
-      slots:
-        slots
-        |> Enum.into(@empty)
-        |> AVLTree.put(Enum.reduce(joint, slot, &Slot.join([&1, &2])))
-    }
+    case Enum.split_with(slots, &(Slot.strict_compare(&1, slot) == :lt)) do
+      {^slots, []} ->
+        %Slots{slots: slots ++ [slot]}
+
+      {head, slots} ->
+        tail =
+          case Enum.split_with(slots, &(Slot.strict_compare(&1, slot) == :gt)) do
+            {^slots, []} ->
+              [slot | slots]
+
+            {tail, joint} ->
+              [Enum.reduce(joint, slot, &Slot.join([&1, &2])) | tail]
+          end
+
+        %Slots{slots: head ++ tail}
+    end
   end
 
   @spec inverse(slots :: Slots.t(), remainder :: :keep | :discard) :: Slots.t()

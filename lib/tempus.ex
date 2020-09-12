@@ -212,47 +212,152 @@ defmodule Tempus do
         %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
       ]
   """
-  def next_free(%Slots{} = slots, opts \\ []),
-    do: do_next_free(Slots.size(slots), slots, {opts, options(opts)})
+  def next_free(%Slots{slots: slots}, opts \\ []),
+    do: do_next_free(slots, options(opts))
 
-  def do_next_free(0, _slots, {_opts, {origin, _count, -1}}),
-    do: [%Slot{from: nil, to: origin}]
+  defp do_next_free([], {origin, 0, -1}),
+    do: %Slot{from: nil, to: Slot.shift(origin, from: -1, unit: :microsecond).from}
 
-  def do_next_free(0, _slots, {_opts, {origin, _count, 1}}),
-    do: [%Slot{from: origin, to: nil}]
+  defp do_next_free([], {origin, _count, -1}),
+    do: [%Slot{from: nil, to: Slot.shift(origin, from: -1, unit: :microsecond).from}]
 
-  def do_next_free(size, slots, {opts, {origin, count, iterator}}) when size > 0 do
-    {first, last} = {AVLTree.get_first(slots.slots), AVLTree.get_last(slots.slots)}
+  defp do_next_free([], {origin, 0, 1}),
+    do: %Slot{from: Slot.shift(origin, to: 1, unit: :microsecond).to, to: nil}
 
-    slots =
-      cond do
-        DateTime.compare(first.from, origin.to) == :gt ->
-          Slots.add(
-            slots,
-            Slot.shift(%Slot{from: origin.from, to: origin.from}, from: -1, to: -1)
-          )
+  defp do_next_free([], {origin, _count, 1}),
+    do: [%Slot{from: Slot.shift(origin, to: 1, unit: :microsecond).to, to: nil}]
 
-        DateTime.compare(origin.from, last.to) == :gt ->
-          Slots.add(slots, Slot.shift(%Slot{from: origin.to, to: origin.to}, from: 1, to: 1))
+  defp do_next_free(slots, {origin, count, 1}) do
+    result =
+      slots
+      |> do_add_infinite_slots(origin)
+      |> Enum.chunk_every(2, 1)
+      |> Enum.reduce_while([], fn
+        _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
+          {:halt, acc}
 
-        true ->
-          slots
-      end
-      |> Slots.inverse()
-      |> next_busy(opts)
-      |> List.wrap()
+        [%Slot{to: from}, %Slot{from: to}], acc ->
+          free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
 
-    prev = Slot.shift(%Slot{to: first.from}, to: -1)
-    next = Slot.shift(%Slot{from: last.to}, from: 1)
+          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
+            do: {:cont, [free_slot | acc]},
+            else: {:cont, acc}
 
-    case {count, iterator, slots} do
-      {0, _, [%Slot{} = slot]} -> slot
-      {0, -1, []} -> prev
-      {0, 1, []} -> next
-      {_, -1, slots} when is_list(slots) -> slots ++ [prev]
-      {_, 1, slots} when is_list(slots) -> slots ++ [next]
+        [%Slot{to: from}], acc ->
+          free_slot = Slot.shift(%Slot{from: from}, from: 1)
+
+          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
+            do: {:cont, [free_slot | acc]},
+            else: {:cont, acc}
+      end)
+      |> Enum.sort({:asc, Slot})
+
+    case {count, result} do
+      {0, []} -> nil
+      {0, [slot]} -> slot
+      {:infinity, result} -> result
+      {count, result} when is_integer(count) and count >= 0 -> Enum.take(result, count)
     end
   end
+
+  defp do_next_free(slots, {origin, count, -1}) do
+    result =
+      slots
+      |> do_add_infinite_slots(origin)
+      |> Enum.reverse()
+      |> Enum.chunk_every(2, 1)
+      |> Enum.reduce_while([], fn
+        _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
+          {:halt, acc}
+
+        [%Slot{from: to}, %Slot{to: from}], acc ->
+          free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
+
+          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+            do: {:cont, [free_slot | acc]},
+            else: {:cont, acc}
+
+        [%Slot{from: to}], acc ->
+          free_slot = Slot.shift(%Slot{to: to}, to: -1)
+
+          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+            do: {:cont, [free_slot | acc]},
+            else: {:cont, acc}
+      end)
+      |> Enum.sort({:desc, Slot})
+
+    case {count, result} do
+      {0, []} -> nil
+      {0, [slot]} -> slot
+      {:infinity, result} -> result
+      {count, result} when is_integer(count) and count >= 0 -> Enum.take(result, count)
+    end
+  end
+
+  @spec do_infinite_slot_after(origin :: Slot.t()) :: Slot.t()
+  defp do_infinite_slot_after(origin),
+    do: %Slot{
+      from: Slot.shift(origin, to: 1, unit: :microsecond).to,
+      to: nil
+    }
+
+  @spec do_infinite_slot_before(origin :: Slot.t()) :: Slot.t()
+  defp do_infinite_slot_before(origin),
+    do: %Slot{
+      from: nil,
+      to: Slot.shift(origin, from: -1, unit: :microsecond).from
+    }
+
+  @spec do_add_infinite_slots(slots :: [Slot.t()], origin :: Slot.t()) :: [Slot.t()]
+  defp do_add_infinite_slots([], origin),
+    do: [do_infinite_slot_before(origin), do_infinite_slot_after(origin)]
+
+  defp do_add_infinite_slots([first | _] = slots, origin) do
+    last = List.last(slots)
+
+    slots =
+      if Slot.compare(origin, first) == :lt,
+        do: [do_infinite_slot_before(origin) | slots],
+        else: slots
+
+    if Slot.compare(origin, last) == :gt,
+      do: slots ++ [do_infinite_slot_after(origin)],
+      else: slots
+  end
+
+  # defp do_next_free(slots, {origin, count, -1}) do
+  #   [last | _] = slots = Enum.reverse(slots)
+
+  #   slots =
+  #     if Slot.compare(origin, last) == :gt,
+  #       do: [Slot.wrap(Slot.shift(origin, to: 1, unit: :microsecond).to) | slots],
+  #       else: slots
+
+  #   slots
+  #   |> Enum.chunk_every(2, 1)
+  #   |> Enum.reduce_while([], fn
+  #     _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
+  #       {:halt, acc}
+
+  #     [%Slot{from: to}, %Slot{to: from}], acc ->
+  #       free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
+
+  #       if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+  #         do: {:cont, [free_slot | acc]},
+  #         else: {:cont, acc}
+
+  #     [%Slot{to: from}], acc ->
+  #       free_slot = Slot.shift(%Slot{from: from}, from: 1)
+
+  #       if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+  #         do: {:cont, [free_slot | acc]},
+  #         else: {:cont, acc}
+  #   end)
+  #   |> case do
+  #     [%Slot{} = slot] -> slot
+  #     list when is_list(list) -> Enum.sort(list, {:desc, Slot})
+  #   end
+  # end
 
   @doc """
   Adds an amount of units to the origin, considering slots given.

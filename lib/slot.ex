@@ -78,8 +78,8 @@ defmodule Tempus.Slot do
   def cover?(%Slot{from: from, to: to} = slot, %DateTime{} = dt, false),
     do:
       cover?(slot, dt, true) or
-        (from && DateTime.compare(from, dt) == :eq) or
-        (from && DateTime.compare(to, dt) == :eq)
+        (not is_nil(from) and DateTime.compare(from, dt) == :eq) or
+        (not is_nil(to) and DateTime.compare(to, dt) == :eq)
 
   def cover?(%Slot{} = slot, %Date{} = dt, strict?),
     do: cover?(slot, wrap(dt, slot.from || slot.to), strict?)
@@ -107,12 +107,8 @@ defmodule Tempus.Slot do
       ),
       do: DateTime.compare(s_from, dt_from) in [:gt, :eq]
 
-  def cover?(
-        %Slot{from: %DateTime{}, to: %DateTime{}} = slot,
-        %Slot{from: %DateTime{} = from, to: %DateTime{} = to},
-        strict?
-      ),
-      do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
+  def cover?(%Slot{} = slot, %Slot{from: from, to: to}, strict?),
+    do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
 
   @spec disjoint?(s1 :: origin(), s2 :: origin()) :: boolean()
   @doc """
@@ -369,6 +365,22 @@ defmodule Tempus.Slot do
     %Slot{from: from, to: to}
   end
 
+  @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
+        when maybe_datetime: nil | DateTime.t()
+  defp do_shift(nil, _, _), do: nil
+
+  defp do_shift(%DateTime{microsecond: {_, 0}} = dt, count, unit),
+    do:
+      %DateTime{dt | microsecond: {0, 6}}
+      |> DateTime.truncate(unit)
+      |> DateTime.add(count, unit)
+
+  defp do_shift(%DateTime{microsecond: {value, n}} = dt, count, unit),
+    do:
+      %DateTime{dt | microsecond: {:erlang.rem(value, round(:math.pow(10, n))), Enum.max([6, 6])}}
+      |> DateTime.truncate(unit)
+      |> DateTime.add(count, unit)
+
   @spec shift_tz(
           slot :: Slot.t(),
           tz :: Calendar.time_zone(),
@@ -394,22 +406,6 @@ defmodule Tempus.Slot do
       ) do
     %Slot{from: DateTime.shift_zone!(from, tz, tz_db), to: DateTime.shift_zone!(to, tz, tz_db)}
   end
-
-  @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
-        when maybe_datetime: nil | DateTime.t()
-  defp do_shift(nil, _, _), do: nil
-
-  defp do_shift(%DateTime{microsecond: {_, 0}} = dt, count, unit),
-    do:
-      %DateTime{dt | microsecond: {0, 6}}
-      |> DateTime.truncate(unit)
-      |> DateTime.add(count, unit)
-
-  defp do_shift(%DateTime{microsecond: {value, n}} = dt, count, unit),
-    do:
-      %DateTime{dt | microsecond: {:erlang.rem(value, round(:math.pow(10, n))), Enum.max([6, 6])}}
-      |> DateTime.truncate(unit)
-      |> DateTime.add(count, unit)
 
   defimpl Inspect do
     import Inspect.Algebra
