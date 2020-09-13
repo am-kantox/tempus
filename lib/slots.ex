@@ -133,7 +133,7 @@ defmodule Tempus.Slots do
     end
   end
 
-  @spec inverse(slots :: Slots.t(), remainder :: :keep | :discard) :: Slots.t()
+  @spec inverse(slots :: Slots.t(), tails :: :keep | :discard) :: Slots.t()
   @doc """
   Inverses `Slots` returning the new `Slots` instance with slots set where
     there were blanks.
@@ -147,27 +147,54 @@ defmodule Tempus.Slots do
       ...>   Tempus.Slot.wrap(~D|2020-08-12|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       ...> |> Tempus.Slots.inverse()
-      #Slots<[#Slot<[from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]]>]>
+      %Tempus.Slots{slots: [
+        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil}]}
   """
-  def inverse(%Slots{} = slots, remainder \\ :discard) do
-    result =
-      Enum.reduce(slots, {nil, %Slots{}}, fn
-        %Slot{} = slot, {nil, slots} ->
-          {slot, slots}
+  def inverse(slots, tails \\ :keep)
 
-        %Slot{} = this, {prev, slots} ->
-          if DateTime.diff(this.from, prev.to, :microsecond) <= 100,
-            do: {%Slot{prev | to: this.to}, slots},
-            else:
-              {this,
-               Slots.add(
-                 slots,
-                 Slot.shift(%Slot{from: prev.to, to: this.from}, from: 1, to: -1)
-               )}
+  def inverse(%Slots{slots: []} = slots, _), do: slots
+
+  def inverse(%Slots{slots: [%Slot{from: from} | _] = slots}, tails) do
+    tail =
+      slots
+      |> Enum.chunk_every(2, 1)
+      |> Enum.reduce([], fn
+        [%Slot{to: from}, %Slot{from: to}], acc ->
+          slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
+          if Slot.valid?(slot), do: [slot | acc], else: acc
+
+        [%Slot{to: from}], acc ->
+          if tails == :keep, do: [Slot.shift(%Slot{from: from}, from: 1) | acc], else: acc
+
+        [%Slot{to: nil}], acc ->
+          acc
       end)
+      |> Enum.sort({:asc, Slot})
 
-    if remainder == :keep, do: result, else: elem(result, 1)
+    slots =
+      if tails != :keep or is_nil(from),
+        do: tail,
+        else: [Slot.shift(%Slot{to: from}, to: -1) | tail]
+
+    %Slots{slots: slots}
   end
+
+  @spec wrap(Slot.t()) :: Slots.t()
+  @doc since: "0.3.0"
+  @doc """
+  Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
+  For everything else it’d call `Slot.wrap/1` on an argument and add it to empty slots.
+
+  ## Examples
+
+      iex> Tempus.Slots.wrap(~D|2020-08-06|)
+      #Slots<[#Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>]>
+  """
+  def wrap(nil), do: %Slots{}
+  def wrap(slot), do: Slots.add(%Slots{}, Slot.wrap(slot))
 
   @spec less(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
   @doc false
@@ -191,11 +218,13 @@ defmodule Tempus.Slots do
 
   defimpl Collectable do
     @moduledoc false
+    alias Tempus.Slots
+
     def into(original) do
       {
         original,
         fn
-          slots, {:cont, value} -> Tempus.Slots.add(slots, value)
+          slots, {:cont, value} -> Slots.add(slots, value)
           slots, :done -> slots
           _, :halt -> :ok
         end

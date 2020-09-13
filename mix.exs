@@ -39,6 +39,7 @@ defmodule Tempus.MixProject do
       {:boundary, "~> 0.4", runtime: false},
       {:avl_tree, "~> 1.0"},
       # dev / test
+      {:benchee, "~> 1.0", only: [:dev, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
       {:ex_doc, "~> 0.11", only: :dev}

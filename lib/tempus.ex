@@ -8,9 +8,11 @@ defmodule Tempus do
   alias Tempus.{Slot, Slots}
 
   @type direction :: :fwd | :bwd
-  @type option :: {:origin, Slot.origin()} | {:count, integer()} | {:direction, direction()}
+  @type count :: :infinity | :stream | non_neg_integer()
+  @type option ::
+          {:origin, Slot.origin()} | {:count, count() | neg_integer()} | {:direction, direction()}
   @type options :: [option()]
-  @typep options_tuple :: {Slot.origin(), :infinity | non_neg_integer(), 1 | -1}
+  @typep options_tuple :: {Slot.origin(), count(), 1 | -1}
 
   @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean() | no_return
   @doc """
@@ -146,24 +148,18 @@ defmodule Tempus do
     do: do_next_busy(slots, options(opts))
 
   def next_busy(%Slot{} = slot, opts),
-    do: next_busy(Slots.add(%Slots{}, slot), opts)
+    do: next_busy(Slots.wrap(slot), opts)
 
   @spec do_next_busy(Slots.t(), options_tuple()) :: [Slot.t()]
   defp do_next_busy(%Slots{} = slots, {origin, count, iterator}) when count >= 0 do
-    {slots, comparator} =
-      if iterator == -1, do: {Enum.reverse(slots), :gt}, else: {Enum.to_list(slots), :lt}
+    {slots, comparator} = if iterator == -1, do: {Enum.reverse(slots), :gt}, else: {slots, :lt}
 
-    result =
-      Enum.drop_while(slots, fn
-        %Slot{} = slot -> Slot.strict_compare(slot, origin) == comparator
-        other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
-      end)
-
-    case count do
-      :infinity -> result
-      0 -> List.first(result)
-      count when is_integer(count) -> Enum.take(result, count)
-    end
+    slots
+    |> Enum.drop_while(fn
+      %Slot{} = slot -> Slot.strict_compare(slot, origin) == comparator
+      other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
+    end)
+    |> wrap_result(count)
   end
 
   @spec next_free(Slots.t(), options()) :: [Slot.t()] | Slot.t() | no_return
@@ -228,69 +224,56 @@ defmodule Tempus do
     do: [%Slot{from: Slot.shift(origin, to: 1, unit: :microsecond).to, to: nil}]
 
   defp do_next_free(slots, {origin, count, 1}) do
-    result =
-      slots
-      |> do_add_infinite_slots(origin)
-      |> Enum.chunk_every(2, 1)
-      |> Enum.reduce_while([], fn
-        _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
-          {:halt, acc}
+    slots
+    |> do_add_infinite_slots(origin)
+    |> Enum.chunk_every(2, 1)
+    |> Enum.reduce_while([], fn
+      _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
+        {:halt, acc}
 
-        [%Slot{to: from}, %Slot{from: to}], acc ->
-          free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
+      [%Slot{to: from}, %Slot{from: to}], acc ->
+        free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
 
-          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
-            do: {:cont, [free_slot | acc]},
-            else: {:cont, acc}
+        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
+          do: {:cont, [free_slot | acc]},
+          else: {:cont, acc}
 
-        [%Slot{to: from}], acc ->
-          free_slot = Slot.shift(%Slot{from: from}, from: 1)
+      [%Slot{to: from}], acc ->
+        free_slot = Slot.shift(%Slot{from: from}, from: 1)
 
-          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
-            do: {:cont, [free_slot | acc]},
-            else: {:cont, acc}
-      end)
-      |> Enum.sort({:asc, Slot})
-
-    case count do
-      :infinity -> result
-      0 -> List.first(result)
-      count when is_integer(count) -> Enum.take(result, count)
-    end
+        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
+          do: {:cont, [free_slot | acc]},
+          else: {:cont, acc}
+    end)
+    |> Enum.sort({:asc, Slot})
+    |> wrap_result(count)
   end
 
   defp do_next_free(slots, {origin, count, -1}) do
-    result =
-      slots
-      |> do_add_infinite_slots(origin)
-      |> Enum.reverse()
-      |> Enum.chunk_every(2, 1)
-      |> Enum.reduce_while([], fn
-        _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
-          {:halt, acc}
+    slots
+    |> do_add_infinite_slots(origin)
+    |> Enum.reverse()
+    |> Enum.chunk_every(2, 1)
+    |> Enum.reduce_while([], fn
+      _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
+        {:halt, acc}
 
-        [%Slot{from: to}, %Slot{to: from}], acc ->
-          free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
+      [%Slot{from: to}, %Slot{to: from}], acc ->
+        free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
 
-          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
-            do: {:cont, [free_slot | acc]},
-            else: {:cont, acc}
+        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+          do: {:cont, [free_slot | acc]},
+          else: {:cont, acc}
 
-        [%Slot{from: to}], acc ->
-          free_slot = Slot.shift(%Slot{to: to}, to: -1)
+      [%Slot{from: to}], acc ->
+        free_slot = Slot.shift(%Slot{to: to}, to: -1)
 
-          if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
-            do: {:cont, [free_slot | acc]},
-            else: {:cont, acc}
-      end)
-      |> Enum.sort({:desc, Slot})
-
-    case {count, result} do
-      {0, []} -> nil
-      {0, [slot]} -> slot
-      {:infinity, result} -> result
-      {count, result} when is_integer(count) and count >= 0 -> Enum.take(result, count)
-    end
+        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
+          do: {:cont, [free_slot | acc]},
+          else: {:cont, acc}
+    end)
+    |> Enum.sort({:desc, Slot})
+    |> wrap_result(count)
   end
 
   @spec do_infinite_slot_after(origin :: Slot.t()) :: Slot.t()
@@ -375,6 +358,15 @@ defmodule Tempus do
     |> DateTime.truncate(unit)
   end
 
+  @spec wrap_result(slots :: Enumerable.t(), count :: count()) :: Slot.t() | Enumerable.t()
+  # defp wrap_result(%Slots{slots: slots}, count), do: wrap_result(slots, count)
+  # defp wrap_result(%Stream{} = slots, :stream), do: slots
+  # defp wrap_result(slots, :stream) when is_function(slots), do: slots
+  defp wrap_result(slots, :stream), do: Stream.map(slots, & &1)
+  defp wrap_result(slots, :infinity), do: slots
+  defp wrap_result(slots, 0), do: Enum.at(slots, 0)
+  defp wrap_result(slots, count) when is_integer(count) and count > 0, do: Enum.take(slots, count)
+
   @spec options(opts :: options()) :: options_tuple()
   defp options(opts) when is_list(opts) do
     origin =
@@ -383,8 +375,8 @@ defmodule Tempus do
       |> Slot.wrap()
 
     case Keyword.get(opts, :count, 0) do
-      :infinity ->
-        {origin, :infinity, if(Keyword.get(opts, :direction, :fwd) == :bwd, do: -1, else: 1)}
+      atom when is_atom(atom) ->
+        {origin, atom, if(Keyword.get(opts, :direction, :fwd) == :bwd, do: -1, else: 1)}
 
       count when is_integer(count) ->
         iterator =
