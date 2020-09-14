@@ -37,6 +37,7 @@ defmodule Tempus.MixProject do
   defp deps do
     [
       {:boundary, "~> 0.4", runtime: false},
+      {:telemetria, "~> 0.8"},
       {:avl_tree, "~> 1.0"},
       # dev / test
       {:benchee, "~> 1.0", only: [:dev, :ci]},
