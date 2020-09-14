@@ -91,7 +91,7 @@ defmodule Tempus.MixProject do
   end
 
   defp compilers(:dev), do: [:boundary | Mix.compilers()]
-  defp compilers(_), do: Mix.compilers()
+  defp compilers(_), do: [:telemetria | Mix.compilers()]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:ci), do: ["lib", "test/support"]
