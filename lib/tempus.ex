@@ -4,6 +4,7 @@ defmodule Tempus do
   """
 
   use Boundary, exports: [Slot, Slots]
+  use Telemetria, action: :import
 
   alias Tempus.{Slot, Slots}
 
@@ -144,9 +145,11 @@ defmodule Tempus do
   """
   def next_busy(slots, opts \\ [])
 
+  @telemetria level: :info
   def next_busy(%Slots{} = slots, opts),
     do: do_next_busy(slots, options(opts))
 
+  @telemetria level: :info
   def next_busy(%Slot{} = slot, opts),
     do: next_busy(Slots.wrap(slot), opts)
 
@@ -208,7 +211,10 @@ defmodule Tempus do
         %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
       ]
   """
-  def next_free(%Slots{slots: slots}, opts \\ []),
+  def next_free(slots, opts \\ [])
+
+  @telemetria level: :info
+  def next_free(%Slots{slots: slots}, opts),
     do: do_next_free(slots, options(opts))
 
   defp do_next_free([], {origin, 0, -1}),
@@ -318,6 +324,7 @@ defmodule Tempus do
         ) :: DateTime.t()
   def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second)
 
+  @telemetria level: :info
   def add(slots, origin, 0, unit) do
     %{from: from} = next_free(slots, origin: origin)
 
@@ -326,6 +333,7 @@ defmodule Tempus do
     |> DateTime.truncate(unit)
   end
 
+  @telemetria level: :info
   def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
     amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
@@ -342,6 +350,7 @@ defmodule Tempus do
     |> DateTime.truncate(unit)
   end
 
+  @telemetria level: :info
   def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
     amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
 

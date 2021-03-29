@@ -12,7 +12,7 @@ defmodule Tempus.MixProject do
       elixir: "~> 1.9",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
-      consolidate_protocols: not (Mix.env() in [:dev, :test]),
+      consolidate_protocols: Mix.env() not in [:dev, :test],
       description: description(),
       package: package(),
       deps: deps(),
@@ -37,6 +37,7 @@ defmodule Tempus.MixProject do
   defp deps do
     [
       {:boundary, "~> 0.4", runtime: false},
+      {:telemetria, "~> 0.8"},
       {:avl_tree, "~> 1.0"},
       # dev / test
       {:benchee, "~> 1.0", only: [:dev, :ci]},
@@ -90,7 +91,7 @@ defmodule Tempus.MixProject do
   end
 
   defp compilers(:dev), do: [:boundary | Mix.compilers()]
-  defp compilers(_), do: Mix.compilers()
+  defp compilers(_), do: [:telemetria | Mix.compilers()]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:ci), do: ["lib", "test/support"]

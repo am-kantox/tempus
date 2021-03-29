@@ -18,6 +18,8 @@ defmodule Tempus.Slots do
   """
   alias Tempus.{Slot, Slots}
 
+  use Telemetria, action: :import
+
   @empty AVLTree.new(&Slots.less/2)
 
   defstruct slots: []
@@ -61,15 +63,19 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
 
   """
+  @telemetria level: :info
   def merge(%Slots{} = this, %Stream{} = other),
     do: do_merge_stream(this, other)
 
+  @telemetria level: :info
   def merge(%Slots{} = this, other) when is_function(other),
     do: do_merge_stream(this, other)
 
+  @telemetria level: :info
   def merge(%Slots{} = this, %Slot{} = slot),
     do: add(this, slot)
 
+  @telemetria level: :info
   def merge(%Slots{} = this, other) do
     if is_nil(Enumerable.impl_for(other)) do
       raise Tempus.ArgumentError, expected: Enum, passed: other
@@ -109,9 +115,11 @@ defmodule Tempus.Slots do
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
+  @telemetria level: :debug
   def add(%Slots{slots: []}, slot),
     do: %Slots{slots: [Slot.wrap(slot)]}
 
+  @telemetria level: :debug
   def add(%Slots{slots: slots}, slot) do
     slot = Slot.wrap(slot)
 
@@ -152,12 +160,25 @@ defmodule Tempus.Slots do
         %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
         %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
         %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil}]}
+
+      iex> [
+      ...>   %Tempus.Slot{to: ~U[2020-08-08 23:59:59.999999Z]},
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|),
+      ...>   %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z]}
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      ...> |> Tempus.Slots.inverse()
+      %Tempus.Slots{slots: [
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]}
+      ]}
   """
   def inverse(slots, tails \\ :keep)
 
+  @telemetria level: :info
   def inverse(%Slots{slots: []} = slots, _), do: slots
 
-  def inverse(%Slots{slots: [%Slot{from: from} | _] = slots}, tails) do
+  @telemetria level: :info
+  def inverse(%Slots{slots: slots}, tails) do
     tail =
       slots
       |> Enum.chunk_every(2, 1)
@@ -167,17 +188,16 @@ defmodule Tempus.Slots do
           if Slot.valid?(slot), do: [slot | acc], else: acc
 
         [%Slot{to: from}], acc ->
-          if tails == :keep, do: [Slot.shift(%Slot{from: from}, from: 1) | acc], else: acc
-
-        [%Slot{to: nil}], acc ->
-          acc
+          if tails == :keep and not is_nil(from),
+            do: [Slot.shift(%Slot{from: from}, from: 1) | acc],
+            else: acc
       end)
       |> Enum.sort({:asc, Slot})
 
     slots =
-      if tails != :keep or is_nil(from),
-        do: tail,
-        else: [Slot.shift(%Slot{to: from}, to: -1) | tail]
+      if tails == :keep and not is_nil(hd(slots).from),
+        do: [Slot.shift(%Slot{to: hd(slots).from}, to: -1) | tail],
+        else: tail
 
     %Slots{slots: slots}
   end

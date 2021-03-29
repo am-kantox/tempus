@@ -20,6 +20,8 @@ slots =
   |> Slots.merge(weekends)
 
 Benchee.run(%{
+  :add_plus => fn -> Tempus.add(slots, ~U|2020-09-13 12:00:00Z|, 600) end,
+  :add_minus => fn -> Tempus.add(slots, ~U|2020-09-13 12:00:00Z|, -600) end,
   :next_busy => fn -> Tempus.next_busy(slots, origin: ~D|2020-09-13|) end,
   :next_free => fn -> Tempus.next_free(slots, origin: ~D|2020-09-13|) end,
   :inverse => fn -> Slots.inverse(slots) end
