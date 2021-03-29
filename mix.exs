@@ -12,7 +12,7 @@ defmodule Tempus.MixProject do
       elixir: "~> 1.9",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
-      consolidate_protocols: not (Mix.env() in [:dev, :test]),
+      consolidate_protocols: Mix.env() not in [:dev, :test],
       description: description(),
       package: package(),
       deps: deps(),
