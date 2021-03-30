@@ -416,6 +416,7 @@ defmodule Tempus.Slot do
 
   defimpl Inspect do
     import Inspect.Algebra
+    # credo:disable-for-next-line
     @fancy_inspect Application.get_env(:tempus, :fancy_inspect, false)
 
     def inspect(%Tempus.Slot{from: from, to: to}, opts) do
