@@ -420,7 +420,7 @@ defmodule Tempus.Slot do
 
     def inspect(%Tempus.Slot{from: from, to: to}, opts) do
       opts.custom_options
-      |> Keyword.get(:fancy_inspect, @fancy_inspect)
+      |> Keyword.get(:fancy, @fancy_inspect)
       |> if do
         value =
           [from, to]
