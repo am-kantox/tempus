@@ -1,5 +1,5 @@
 defmodule Tempus.Test do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   doctest Tempus
   doctest Tempus.Slot
   doctest Tempus.Slots
