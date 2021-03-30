@@ -176,9 +176,16 @@ defmodule Tempus.Slot do
 
       iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
       #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+
+      iex> Tempus.Slot.join([~D|2020-09-30|, ~D|2020-10-02|])
+      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
   """
-  def join(slots) do
-    Enum.reduce(slots, fn slot, acc ->
+  def join([]), do: %Slot{from: nil, to: nil}
+
+  def join([slot | slots]) do
+    Enum.reduce(slots, wrap(slot), fn slot, acc ->
+      slot = wrap(slot)
+
       from =
         if DateTime.compare(slot.from, acc.from) == :lt,
           do: slot.from,
@@ -287,7 +294,7 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.wrap(~D|2020-08-06|)
       #Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
   """
-  def wrap(moment, origin \\ DateTime.utc_now())
+  def wrap(moment \\ nil, origin \\ DateTime.utc_now())
 
   def wrap(nil, origin), do: wrap(DateTime.utc_now(), origin)
   def wrap(%Slot{} = slot, _), do: slot
@@ -409,6 +416,31 @@ defmodule Tempus.Slot do
 
   defimpl Inspect do
     import Inspect.Algebra
+    # credo:disable-for-next-line
+    @fancy_inspect Application.get_env(:tempus, :fancy_inspect, false)
+
+    def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
+      opts.custom_options
+      |> Keyword.get(:fancy, @fancy_inspect)
+      |> case do
+        truthy when truthy in [:emoji, true] ->
+          value =
+            [from, to]
+            |> Enum.map(&DateTime.to_iso8601/1)
+            |> Enum.join(" → ")
+
+          tag =
+            case truthy do
+              :emoji -> "⌚"
+              true -> "#Slot"
+            end
+
+          concat([tag, "<", value, ">"])
+
+        _ ->
+          concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+      end
+    end
 
     def inspect(%Tempus.Slot{from: from, to: to}, opts) do
       concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
