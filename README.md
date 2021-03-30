@@ -13,7 +13,7 @@ end
 ```
 
 ## Changelog
-
+- **`0.4.0`** — `~I` sigil to ease slots creation, wrap date/times, fancy inspect
 - **`0.3.0`** — drastical performance improvements, benchmarks
 - **`0.2.4`** — fixed bug when finding next free/busy for empty slots
 - **`0.2.3`** — correctly handle empty slots in `next_busy/2`/`next_free/2`
