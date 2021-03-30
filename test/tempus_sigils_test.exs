@@ -22,6 +22,11 @@ defmodule Tempus.Sigils.Test do
     assert capture_io(fn ->
              # credo:disable-for-next-line
              IO.inspect(~I[2021-03-30]d, custom_options: [fancy: true])
+           end) == "#Slot<2021-03-30T00:00:00.000000Z → 2021-03-30T23:59:59.999999Z>\n"
+
+    assert capture_io(fn ->
+             # credo:disable-for-next-line
+             IO.inspect(~I[2021-03-30]d, custom_options: [fancy: :emoji])
            end) == "⌚<2021-03-30T00:00:00.000000Z → 2021-03-30T23:59:59.999999Z>\n"
   end
 end

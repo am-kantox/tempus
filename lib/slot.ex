@@ -419,19 +419,31 @@ defmodule Tempus.Slot do
     # credo:disable-for-next-line
     @fancy_inspect Application.get_env(:tempus, :fancy_inspect, false)
 
-    def inspect(%Tempus.Slot{from: from, to: to}, opts) do
+    def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
       opts.custom_options
       |> Keyword.get(:fancy, @fancy_inspect)
-      |> if do
-        value =
-          [from, to]
-          |> Enum.map(&DateTime.to_iso8601/1)
-          |> Enum.join(" → ")
+      |> case do
+        truthy when truthy in [:emoji, true] ->
+          value =
+            [from, to]
+            |> Enum.map(&DateTime.to_iso8601/1)
+            |> Enum.join(" → ")
 
-        concat(["⌚<", value, ">"])
-      else
-        concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+          tag =
+            case truthy do
+              :emoji -> "⌚"
+              true -> "#Slot"
+            end
+
+          concat([tag, "<", value, ">"])
+
+        _ ->
+          concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
       end
+    end
+
+    def inspect(%Tempus.Slot{from: from, to: to}, opts) do
+      concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
     end
   end
 end
