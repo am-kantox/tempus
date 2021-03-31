@@ -12,9 +12,9 @@ defmodule Tempus.Sigils.Test do
              to: ~U[2021-03-30 23:59:59.999999Z]
            }
 
-    assert ~I[07:23:06]t == %Slot{
-             from: ~U[2021-03-30 07:23:06Z],
-             to: ~U[2021-03-30 07:23:06Z]
+    assert ~I[07:00:00]t == %Slot{
+             from: DateTime.add(~U[2021-03-31T00:00:00Z], elem(Time.to_seconds_after_midnight(~T[07:00:00]), 0)),
+             to: DateTime.add(~U[2021-03-31T00:00:00Z], elem(Time.to_seconds_after_midnight(~T[07:00:00]), 0))
            }
   end
 
