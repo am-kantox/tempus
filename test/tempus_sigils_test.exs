@@ -13,16 +13,20 @@ defmodule Tempus.Sigils.Test do
            }
 
     assert ~I[07:00:00]t == %Slot{
-             from:
-               DateTime.add(
-                 ~U[2021-03-31T00:00:00Z],
-                 elem(Time.to_seconds_after_midnight(~T[07:00:00]), 0)
-               ),
-             to:
-               DateTime.add(
-                 ~U[2021-03-31T00:00:00Z],
-                 elem(Time.to_seconds_after_midnight(~T[07:00:00]), 0)
-               )
+             from: %DateTime{
+               DateTime.utc_now()
+               | hour: 7,
+                 minute: 0,
+                 second: 0,
+                 microsecond: {0, 0}
+             },
+             to: %DateTime{
+               DateTime.utc_now()
+               | hour: 7,
+                 minute: 0,
+                 second: 0,
+                 microsecond: {0, 0}
+             }
            }
   end
 
