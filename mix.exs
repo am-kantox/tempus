@@ -2,7 +2,7 @@ defmodule Tempus.MixProject do
   use Mix.Project
 
   @app :tempus
-  @version "0.4.1"
+  @version "0.4.2"
 
   def project do
     [
@@ -36,9 +36,9 @@ defmodule Tempus.MixProject do
 
   defp deps do
     [
-      {:boundary, "~> 0.4", runtime: false},
-      {:telemetria, "~> 0.8"},
-      {:avl_tree, "~> 1.0"},
+      {:boundary, "~> 0.4"},
+      {:telemetria, "~> 0.8", runtime: false, optional: true},
+      {:avl_tree, "~> 1.0", app: false},
       # dev / test
       {:benchee, "~> 1.0", only: [:dev, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
@@ -90,8 +90,9 @@ defmodule Tempus.MixProject do
     ]
   end
 
-  defp compilers(:dev), do: [:boundary | Mix.compilers()]
-  defp compilers(_), do: [:telemetria | Mix.compilers()]
+  defp compilers(:dev), do: [:boundary, :telemetria | Mix.compilers()]
+  defp compilers(:test), do: [:telemetria | Mix.compilers()]
+  defp compilers(_), do: Mix.compilers()
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:dev), do: ["lib", "test/support"]

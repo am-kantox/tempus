@@ -18,7 +18,7 @@ defmodule Tempus.Slots do
   """
   alias Tempus.{Slot, Slots}
 
-  use Telemetria, action: :import
+  use Tempus.Telemetria, action: :import
 
   @empty AVLTree.new(&Slots.less/2)
 

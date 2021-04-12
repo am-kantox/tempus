@@ -4,7 +4,7 @@ defmodule Tempus do
   """
 
   use Boundary, exports: [Slot, Slots]
-  use Telemetria, action: :import
+  use Tempus.Telemetria, action: :import
 
   alias Tempus.{Slot, Slots}
 
