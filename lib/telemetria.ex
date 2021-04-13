@@ -17,7 +17,7 @@ defmodule Tempus.Telemetria do
     case Module.get_attribute(module, :telemetria) do
       [_ | _] ->
         # Mix.shell().info(
-        #   ":telemetria events for #{inspect(module)} are disabled. Explicitly include :telemetria dependency to enable them."
+        #   ":telemetria events for #{inspect(module)} are disabled."
         # )
         :ok
 
