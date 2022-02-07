@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.5.0`** — stricter `:telemetria` support
 - **`0.4.2`** — make `:telemetria` dependency fully optional
 - **`0.4.0`** — `~I` sigil to ease slots creation, wrap date/times, fancy inspect
 - **`0.3.0`** — drastical performance improvements, benchmarks
