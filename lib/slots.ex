@@ -64,18 +64,17 @@ defmodule Tempus.Slots do
 
   """
   @telemetria level: :info
+  def merge(this, other)
+
   def merge(%Slots{} = this, %Stream{} = other),
     do: do_merge_stream(this, other)
 
-  @telemetria level: :info
   def merge(%Slots{} = this, other) when is_function(other),
     do: do_merge_stream(this, other)
 
-  @telemetria level: :info
   def merge(%Slots{} = this, %Slot{} = slot),
     do: add(this, slot)
 
-  @telemetria level: :info
   def merge(%Slots{} = this, other) do
     if is_nil(Enumerable.impl_for(other)) do
       raise Tempus.ArgumentError, expected: Enum, passed: other
@@ -116,10 +115,11 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
   @telemetria level: :debug
+  def add(slots, slot)
+
   def add(%Slots{slots: []}, slot),
     do: %Slots{slots: [Slot.wrap(slot)]}
 
-  @telemetria level: :debug
   def add(%Slots{slots: slots}, slot) do
     slot = Slot.wrap(slot)
 
@@ -172,12 +172,11 @@ defmodule Tempus.Slots do
         %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]}
       ]}
   """
+  @telemetria level: :info
   def inverse(slots, tails \\ :keep)
 
-  @telemetria level: :info
   def inverse(%Slots{slots: []} = slots, _), do: slots
 
-  @telemetria level: :info
   def inverse(%Slots{slots: slots}, tails) do
     tail =
       slots
