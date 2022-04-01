@@ -333,33 +333,33 @@ defmodule Tempus do
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
-    amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
+    amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
     [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
 
     [%Slot{slot | from: origin} | slots]
-    |> Enum.reduce_while(amount_in_μs, fn %Slot{} = slot, rest_to_add_in_μs ->
-      maybe_result = DateTime.add(slot.from, rest_to_add_in_μs, :microsecond)
+    |> Enum.reduce_while(amount_in_microseconds, fn %Slot{} = slot, rest_to_add_in_microseconds ->
+      maybe_result = DateTime.add(slot.from, rest_to_add_in_microseconds, :microsecond)
 
       if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
         do: {:halt, maybe_result},
-        else: {:cont, rest_to_add_in_μs - Slot.duration(slot, :microsecond)}
+        else: {:cont, rest_to_add_in_microseconds - Slot.duration(slot, :microsecond)}
     end)
     |> DateTime.truncate(unit)
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
-    amount_in_μs = System.convert_time_unit(amount_to_add, unit, :microsecond)
+    amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
     [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :bwd)
 
     [%Slot{slot | to: origin} | slots]
-    |> Enum.reduce_while(amount_in_μs, fn %Slot{} = slot, rest_to_add_in_μs ->
-      maybe_result = DateTime.add(slot.to, rest_to_add_in_μs, :microsecond)
+    |> Enum.reduce_while(amount_in_microseconds, fn %Slot{} = slot, rest_to_add_in_microseconds ->
+      maybe_result = DateTime.add(slot.to, rest_to_add_in_microseconds, :microsecond)
 
       if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
         do: {:halt, maybe_result},
-        else: {:cont, rest_to_add_in_μs + Slot.duration(slot, :microsecond)}
+        else: {:cont, rest_to_add_in_microseconds + Slot.duration(slot, :microsecond)}
     end)
     |> DateTime.truncate(unit)
   end

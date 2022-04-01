@@ -423,10 +423,7 @@ defmodule Tempus.Slot do
       |> Keyword.get(:fancy, @fancy_inspect)
       |> case do
         truthy when truthy in [:emoji, true] ->
-          value =
-            [from, to]
-            |> Enum.map(&DateTime.to_iso8601/1)
-            |> Enum.join(" → ")
+          value = Enum.map_join([from, to], " → ", &DateTime.to_iso8601/1)
 
           tag =
             case truthy do

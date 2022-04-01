@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.6.0`** — compatibility with _Elixir v1.14_ (no greek in variables names) meh
 - **`0.5.0`** — stricter `:telemetria` support
 - **`0.4.2`** — make `:telemetria` dependency fully optional
 - **`0.4.0`** — `~I` sigil to ease slots creation, wrap date/times, fancy inspect
