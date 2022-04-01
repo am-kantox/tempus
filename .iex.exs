@@ -39,7 +39,7 @@ IEx.configure(
 
 alias Tempus.{Slot, Slots}
 
-μs_in_week = 604_800_000_000
+microseconds_in_week = 604_800_000_000
 
 first_weekend = %Slot{from: ~U|2018-01-05 21:00:00Z|, to: ~U|2018-01-08 08:59:59Z|}
 
@@ -48,7 +48,7 @@ weekends =
     first_weekend,
     fn acc ->
       acc
-      |> Tempus.Slot.shift(from: μs_in_week, to: μs_in_week)
+      |> Tempus.Slot.shift(from: microseconds_in_week, to: microseconds_in_week)
       |> Tempus.Slot.shift_tz()
     end
   )
