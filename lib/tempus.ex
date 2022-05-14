@@ -15,7 +15,8 @@ defmodule Tempus do
   @type options :: [option()]
   @typep options_tuple :: {Slot.origin(), count(), 1 | -1}
 
-  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean() | no_return
+  @spec free?(slots :: Slots.t(), slot :: Slot.origin(), method :: :smart | :size) ::
+          boolean() | no_return
   @doc """
   Checks whether the slot is disjoined against slots.
 
@@ -30,8 +31,43 @@ defmodule Tempus do
       iex> Tempus.free?(slots, ~D|2020-08-08|)
       true
   """
-  def free?(%Slots{} = slots, slot),
-    do: Slots.size(Slots.add(slots, Slot.wrap(slot))) == Slots.size(slots) + 1
+  def free?(slots, slot, method \\ :smart)
+
+  def free?(%Slots{} = slots, %Slot{} = slot, :size),
+    do: Slots.size(Slots.add(slots, slot)) == Slots.size(slots) + 1
+
+  def free?(%Slots{slots: []}, %Slot{}, :smart), do: true
+
+  def free?(%Slots{slots: slots}, %Slot{} = origin, :smart) do
+    slots
+    |> Enum.reduce_while(nil, fn
+      %Slot{} = current, nil ->
+        if Date.compare(current.from, origin.to) == :gt,
+          do: {:halt, current},
+          else: {:cont, current}
+
+      %Slot{} = current, %Slot{} = previous ->
+        if DateTime.compare(previous.to, origin.from) == :lt do
+          if DateTime.compare(current.to, origin.from) == :lt do
+            {:cont, current}
+          else
+            if DateTime.compare(current.from, origin.to) == :gt do
+              {:halt, current}
+            else
+              {:halt, nil}
+            end
+          end
+        else
+          {:halt, nil}
+        end
+    end)
+    |> case do
+      nil -> false
+      %Slot{} -> true
+    end
+  end
+
+  def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)
 
   @spec days_add(slots :: Slots.t(), opts :: options()) :: Date.t()
   @doc since: "0.2.0"
