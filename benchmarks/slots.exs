@@ -15,7 +15,7 @@ weekends =
   )
 
 slots =
-  [~D|2018-01-01|, ~D|2022-12-31|]
+  [~D|2018-01-01|, ~D|2025-12-31|]
   |> Enum.into(%Slots{})
   |> Slots.merge(weekends)
 
