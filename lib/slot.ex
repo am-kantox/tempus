@@ -132,6 +132,29 @@ defmodule Tempus.Slot do
     compare(s1, s2) in [:lt, :gt]
   end
 
+  @doc """
+  Returns `true` if two slots are neighbours, `false` otherwise.
+
+  ## Examples
+
+      iex> slot = %Tempus.Slot{from: ~U|2015-09-01 00:00:00Z|, to: ~U|2015-10-01 23:59:59Z|}
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-02|))
+      true
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-08-31|))
+      true
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-01|))
+      false
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-03|))
+      false
+  """
+  @spec neighbour?(s1 :: origin(), s2 :: origin()) :: boolean()
+  def neighbour?(s1, s2) do
+    [%Slot{to: to}, %Slot{from: from}] = [s1, s2] |> Enum.map(&wrap/1) |> Enum.sort(Slot)
+
+    not is_nil(to) and not is_nil(from) and DateTime.compare(from, to) == :gt and
+      DateTime.diff(from, to, :second) <= 1
+  end
+
   @spec intersect(slots :: Enum.t()) :: Slot.t() | nil
   @doc """
   Intersects slots to the minimal covered timeslice.

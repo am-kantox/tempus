@@ -8,10 +8,10 @@ defmodule Tempus.Test do
 
   test "consuming stream" do
     holidays = [~D|2020-08-06|, ~D|2020-08-13|]
-    weekends = Stream.map([~D|2020-08-08|, ~D|2020-08-20|], & &1)
+    weekends = Stream.map([~D|2020-08-08|, ~D|2020-08-20|, ~D|2020-08-22|], & &1)
     schedule = holidays |> Enum.into(%Slots{}) |> Slots.merge(weekends)
 
-    assert Slots.size(schedule) == 3
+    assert Slots.size(schedule) == 4
   end
 
   test "working days" do
@@ -55,6 +55,47 @@ defmodule Tempus.Test do
              Enum.into([~D|2020-08-06|, ~D|2020-08-08|], %Slots{})
 
     assert Tempus.slice(slots, nil, nil, :greedy) == slots
+  end
+
+  test "merge/2" do
+    micros_in_three_days = 259_200_000_000
+
+    slots =
+      Enum.into(
+        [~D|2020-08-06|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|, ~D|2020-08-14|],
+        %Slots{}
+      )
+
+    stream =
+      Stream.iterate(
+        Tempus.Slot.wrap(~D|2020-08-06|),
+        fn acc ->
+          acc
+          |> Tempus.Slot.shift(from: micros_in_three_days, to: micros_in_three_days)
+          |> Tempus.Slot.shift_tz()
+        end
+      )
+
+    assert Tempus.Slots.merge(slots, stream) == %Slots{
+             slots: [
+               %Tempus.Slot{
+                 from: ~U[2020-08-06 00:00:00.000000Z],
+                 to: ~U[2020-08-06 23:59:59.999999Z]
+               },
+               %Tempus.Slot{
+                 from: ~U[2020-08-08 00:00:00.000000Z],
+                 to: ~U[2020-08-10 23:59:59.999999Z]
+               },
+               %Tempus.Slot{
+                 from: ~U[2020-08-12 00:00:00.000000Z],
+                 to: ~U[2020-08-12 23:59:59.999999Z]
+               },
+               %Tempus.Slot{
+                 from: ~U[2020-08-14 00:00:00.000000Z],
+                 to: ~U[2020-08-15 23:59:59.999999Z]
+               }
+             ]
+           }
   end
 
   test "add/4" do

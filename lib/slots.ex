@@ -60,7 +60,7 @@ defmodule Tempus.Slots do
       iex> Tempus.Slots.merge(slots, other)
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
       iex> Tempus.Slots.merge(slots, Stream.map(other, & &1))
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
+      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
 
   """
   @telemetria level: :info
@@ -87,16 +87,39 @@ defmodule Tempus.Slots do
   defp do_merge_stream(%Slots{slots: []}, other),
     do: %Slots{slots: Enum.take(other, 1)}
 
-  defp do_merge_stream(%Slots{slots: slots} = this, other) do
-    other =
-      other
-      |> Stream.take_while(&(&1 |> Slot.wrap() |> less(List.last(slots))))
-      |> Enum.to_list()
+  defp do_merge_stream(%Slots{slots: slots}, other) do
+    chunk_fun = fn slot, acc ->
+      slot = Slot.wrap(slot)
+      {head, tail} = Enum.split_while(acc, &(less(&1, slot) and not Slot.neighbour?(&1, slot)))
 
-    merge(this, other)
+      {joint, tail} =
+        Enum.split_while(
+          tail,
+          &(Slot.strict_compare(&1, slot) != :gt or Slot.neighbour?(&1, slot))
+        )
+
+      %Slots{slots: joint} = add(wrap_unsafe(joint), slot, true)
+
+      case tail do
+        [] -> {:halt, head ++ joint}
+        _ -> {:cont, head ++ joint, tail}
+      end
+    end
+
+    after_fun = fn
+      [] -> {:cont, []}
+      acc -> {:cont, acc, []}
+    end
+
+    slots =
+      other
+      |> Stream.chunk_while(slots, chunk_fun, after_fun)
+      |> Enum.flat_map(& &1)
+
+    %Slots{slots: slots}
   end
 
-  @spec add(t(), Slot.origin()) :: t()
+  @spec add(slots :: t(), slot :: Slot.origin(), join_neighbours :: boolean()) :: t()
   @doc """
   Adds another slot to the slots collection.
 
@@ -115,25 +138,52 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
   @telemetria level: :debug
-  def add(slots, slot)
+  def add(slots, slot, join_neighbours \\ false)
 
-  def add(%Slots{slots: []}, slot),
+  def add(%Slots{slots: []}, slot, _),
     do: %Slots{slots: [Slot.wrap(slot)]}
 
-  def add(%Slots{slots: slots}, slot) do
+  def add(%Slots{slots: slots}, slot, false) do
     slot = Slot.wrap(slot)
 
-    case Enum.split_with(slots, &(Slot.strict_compare(&1, slot) == :lt)) do
+    case Enum.split_while(slots, &(Slot.strict_compare(&1, slot) == :lt)) do
       {^slots, []} ->
         %Slots{slots: slots ++ [slot]}
 
       {head, slots} ->
         tail =
-          case Enum.split_with(slots, &(Slot.strict_compare(&1, slot) == :gt)) do
-            {^slots, []} ->
+          case Enum.split_while(slots, &(Slot.strict_compare(&1, slot) != :gt)) do
+            {[], ^slots} ->
               [slot | slots]
 
-            {tail, joint} ->
+            {joint, tail} ->
+              [Enum.reduce(joint, slot, &Slot.join([&1, &2])) | tail]
+          end
+
+        %Slots{slots: head ++ tail}
+    end
+  end
+
+  def add(%Slots{slots: slots}, slot, true) do
+    slot = Slot.wrap(slot)
+
+    case Enum.split_while(
+           slots,
+           &(Slot.strict_compare(&1, slot) == :lt and not Slot.neighbour?(&1, slot))
+         ) do
+      {^slots, []} ->
+        %Slots{slots: slots ++ [slot]}
+
+      {head, slots} ->
+        tail =
+          case Enum.split_while(
+                 slots,
+                 &(Slot.strict_compare(&1, slot) != :gt or Slot.neighbour?(&1, slot))
+               ) do
+            {[], ^slots} ->
+              [slot | slots]
+
+            {joint, tail} ->
               [Enum.reduce(joint, slot, &Slot.join([&1, &2])) | tail]
           end
 
