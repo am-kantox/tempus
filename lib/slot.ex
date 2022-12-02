@@ -275,6 +275,8 @@ defmodule Tempus.Slot do
     end
   end
 
+  def compare(s1, s2, strict), do: compare(wrap(s1), wrap(s2), strict)
+
   @spec strict_compare(s1 :: Slot.t(), s2 :: Slot.t()) :: :eq | :lt | :gt | :joint
   @doc """
   Compares two slot structs. The same as `compare/2`, but returns `:joint` if

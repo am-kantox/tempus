@@ -69,6 +69,57 @@ defmodule Tempus do
 
   def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)
 
+  @typedoc """
+  The type defining how slicing is to be applied.
+  When `:greedy`, overlapping boundary slots would be included,
+    `:reluctant` would take only those fully contained in the interval.
+  """
+  @type slice_type :: :greedy | :reluctant
+  @spec slice(
+          slots :: Slots.t(),
+          from :: Slot.origin(),
+          to :: Slot.origin(),
+          type :: slice_type()
+        ) :: Slots.t()
+  @doc since: "0.7.0"
+  @doc """
+  Slices the `%Slots{}` based on origins `from` and `to` and an optional type
+    (default: `:reluctant`.) Returns sliced `%Slots{}` back.
+  """
+  def slice(slots, from, to, type \\ :reluctant)
+  def slice(slots, nil, nil, _), do: slots
+
+  def slice(slots, from, nil, :greedy) do
+    slots
+    |> Enum.drop_while(&(Slot.compare(&1, from) == :lt))
+    |> Slots.wrap_unsafe()
+  end
+
+  def slice(slots, from, nil, :reluctant) do
+    slots
+    |> slice(from, nil, :greedy)
+    |> Enum.drop_while(&(Slot.compare(&1, from) != :gt))
+    |> Slots.wrap_unsafe()
+  end
+
+  def slice(slots, nil, to, :greedy) do
+    slots
+    |> Enum.take_while(&(Slot.compare(&1, to) != :gt))
+    |> Slots.wrap_unsafe()
+  end
+
+  def slice(slots, nil, to, :reluctant) do
+    slots
+    |> Enum.take_while(&(Slot.compare(&1, to) == :lt))
+    |> Slots.wrap_unsafe()
+  end
+
+  def slice(slots, from, to, type) do
+    slots
+    |> slice(from, nil, type)
+    |> slice(nil, to, type)
+  end
+
   @spec days_add(slots :: Slots.t(), opts :: options()) :: Date.t()
   @doc since: "0.2.0"
   @doc """

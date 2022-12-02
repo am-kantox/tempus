@@ -201,7 +201,7 @@ defmodule Tempus.Slots do
     %Slots{slots: slots}
   end
 
-  @spec wrap(Slot.t()) :: Slots.t()
+  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.t()
   @doc since: "0.3.0"
   @doc """
   Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
@@ -213,7 +213,12 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>]>
   """
   def wrap(nil), do: %Slots{}
+  def wrap(slots) when is_list(slots), do: %Slots{slots: Enum.map(slots, &Slot.wrap/1)}
   def wrap(slot), do: Slots.add(%Slots{}, Slot.wrap(slot))
+
+  @spec wrap_unsafe([Slot.t()]) :: Slots.t()
+  @doc false
+  def wrap_unsafe(slots) when is_list(slots), do: %Slots{slots: slots}
 
   @spec less(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
   @doc false
@@ -222,17 +227,22 @@ defmodule Tempus.Slots do
 
   defimpl Enumerable do
     @moduledoc false
-    def reduce(%Slots{slots: slots}, {state, acc}, fun),
-      do: Enumerable.reduce(slots, {state, acc}, fun)
+    def reduce(_slots, {:halt, acc}, _fun), do: {:halted, acc}
+
+    def reduce(%Slots{} = slots, {:suspend, acc}, fun),
+      do: {:suspended, acc, &reduce(slots, &1, fun)}
+
+    def reduce(%Slots{slots: []}, {:cont, acc}, _fun), do: {:done, acc}
+
+    def reduce(%Slots{slots: [head | tail]}, {:cont, acc}, fun),
+      do: reduce(%Slots{slots: tail}, fun.(head, acc), fun)
 
     def member?(%Slots{slots: slots}, value),
       do: Enumerable.member?(slots, value)
 
     def count(%Slots{slots: %AVLTree{size: size}}), do: {:ok, size}
-
-    def slice(_) do
-      {:error, __MODULE__}
-    end
+    def count(%Slots{slots: slots}), do: {:ok, length(slots)}
+    def slice(%Slots{slots: slots}), do: {:ok, length(slots), & &1.slots}
   end
 
   defimpl Collectable do

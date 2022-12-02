@@ -26,5 +26,6 @@ Benchee.run(%{
   :smart_free? => fn -> Tempus.free?(slots, ~U|2020-09-13 12:00:00Z|, :smart) end,
   :inverse => fn -> Slots.inverse(slots) end,
   :next_busy => fn -> Tempus.next_busy(slots, origin: ~D|2020-09-13|) end,
-  :next_free => fn -> Tempus.next_free(slots, origin: ~D|2020-09-13|) end
+  :next_free => fn -> Tempus.next_free(slots, origin: ~D|2020-09-13|) end,
+  :slice => fn -> Tempus.slice(slots, ~U[2020-08-08 12:00:00.000000Z], ~U[2020-08-12 12:00:00.000000Z]) end
 })
