@@ -89,35 +89,44 @@ defmodule Tempus do
   def slice(slots, from, to, type \\ :reluctant)
   def slice(slots, nil, nil, _), do: slots
 
-  def slice(slots, from, nil, :greedy) do
-    slots
-    |> Enum.drop_while(&(Slot.compare(&1, from) == :lt))
-    |> Slots.wrap_unsafe()
-  end
+  def slice(slots, from, nil, :greedy),
+    do: drop_while(slots, &(Slot.compare(&1, from) == :lt))
 
-  def slice(slots, from, nil, :reluctant) do
-    slots
-    |> slice(from, nil, :greedy)
-    |> Enum.drop_while(&(Slot.compare(&1, from) != :gt))
-    |> Slots.wrap_unsafe()
-  end
+  def slice(slots, from, nil, :reluctant),
+    do: drop_while(slots, &(Slot.compare(&1, from) != :gt))
 
-  def slice(slots, nil, to, :greedy) do
-    slots
-    |> Enum.take_while(&(Slot.compare(&1, to) != :gt))
-    |> Slots.wrap_unsafe()
-  end
+  def slice(slots, nil, to, :greedy),
+    do: take_while(slots, &(Slot.compare(&1, to) != :gt))
 
-  def slice(slots, nil, to, :reluctant) do
-    slots
-    |> Enum.take_while(&(Slot.compare(&1, to) == :lt))
-    |> Slots.wrap_unsafe()
-  end
+  def slice(slots, nil, to, :reluctant),
+    do: take_while(slots, &(Slot.compare(&1, to) == :lt))
 
   def slice(slots, from, to, type) do
     slots
     |> slice(from, nil, type)
     |> slice(nil, to, type)
+  end
+
+  @spec drop_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @doc since: "0.7.0"
+  @doc """
+  Drops slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
+  """
+  def drop_while(slots, fun) do
+    slots
+    |> Enum.drop_while(fun)
+    |> Slots.wrap_unsafe()
+  end
+
+  @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @doc since: "0.7.0"
+  @doc """
+  Takes slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
+  """
+  def take_while(slots, fun) do
+    slots
+    |> Enum.take_while(fun)
+    |> Slots.wrap_unsafe()
   end
 
   @spec days_add(slots :: Slots.t(), opts :: options()) :: Date.t()
