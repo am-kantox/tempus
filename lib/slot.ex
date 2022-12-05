@@ -223,6 +223,20 @@ defmodule Tempus.Slot do
     end)
   end
 
+  @spec join(Slot.t(), Slot.t()) :: Slot.t()
+  @doc """
+  Joins two slots to the maximal covered timeslice.
+
+  ### Example
+
+      iex> Tempus.Slot.join(Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|))
+      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+
+      iex> Tempus.Slot.join(~D|2020-09-30|, ~D|2020-10-02|)
+      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+  """
+  def join(s1, s2), do: join([s1, s2])
+
   @spec duration(slot :: Slot.t(), unit :: System.time_unit()) :: non_neg_integer() | :infinity
   @doc """
   Calculates the duration of a slot in units given as a second parameter

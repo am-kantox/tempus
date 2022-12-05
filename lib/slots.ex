@@ -157,7 +157,7 @@ defmodule Tempus.Slots do
               [slot | slots]
 
             {joint, tail} ->
-              [Enum.reduce(joint, slot, &Slot.join([&1, &2])) | tail]
+              [Enum.reduce(joint, slot, &Slot.join/2) | tail]
           end
 
         %Slots{slots: head ++ tail}
@@ -184,7 +184,7 @@ defmodule Tempus.Slots do
               [slot | slots]
 
             {joint, tail} ->
-              [Enum.reduce(joint, slot, &Slot.join([&1, &2])) | tail]
+              [Enum.reduce(joint, slot, &Slot.join/2) | tail]
           end
 
         %Slots{slots: head ++ tail}
