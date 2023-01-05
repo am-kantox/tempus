@@ -41,6 +41,33 @@ defmodule Tempus.Slots do
   @doc "Returns the AVL Tree instance of slots"
   def avl_tree(%Slots{slots: slots}), do: Enum.into(slots, @empty)
 
+  @spec merge(slots :: [t()]) :: t()
+  @doc """
+  Merges many slots into the first element in the list given as an argument.
+
+  Other arguments might be streams, the first one must be a `Tempus.Slots` instance.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> other = [
+      ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
+      ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
+      ...> ]
+      iex> Tempus.Slots.merge([slots, other])
+      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
+      iex> Tempus.Slots.merge([slots, Stream.map(other, & &1)])
+      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
+
+  """
+  def merge([]), do: %Slots{}
+
+  def merge([%Slots{} | _] = slots) when is_list(slots),
+    do: Enum.reduce(slots, &merge(&2, &1))
+
   @spec merge(this :: t(), other :: Enumerable.t()) :: t()
   @doc """
   Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.

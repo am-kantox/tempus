@@ -438,14 +438,23 @@ defmodule Tempus do
     [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
 
     [%Slot{slot | from: origin} | slots]
-    |> Enum.reduce_while(amount_in_microseconds, fn %Slot{} = slot, rest_to_add_in_microseconds ->
-      maybe_result = DateTime.add(slot.from, rest_to_add_in_microseconds, :microsecond)
+    |> Enum.reduce_while({origin, amount_in_microseconds}, fn
+      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
+        maybe_result = DateTime.add(slot.from, rest_to_add_in_microseconds, :microsecond)
 
-      if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
-        do: {:halt, maybe_result},
-        else: {:cont, rest_to_add_in_microseconds - Slot.duration(slot, :microsecond)}
+        if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
+          do: {:halt, maybe_result},
+          else:
+            {:cont,
+             {maybe_result, rest_to_add_in_microseconds - Slot.duration(slot, :microsecond)}}
     end)
-    |> DateTime.truncate(unit)
+    |> case do
+      %DateTime{} = result ->
+        DateTime.truncate(result, unit)
+
+      {%DateTime{} = result, rest} when is_integer(rest) ->
+        DateTime.add(result, rest, :microsecond)
+    end
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
@@ -454,14 +463,23 @@ defmodule Tempus do
     [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :bwd)
 
     [%Slot{slot | to: origin} | slots]
-    |> Enum.reduce_while(amount_in_microseconds, fn %Slot{} = slot, rest_to_add_in_microseconds ->
-      maybe_result = DateTime.add(slot.to, rest_to_add_in_microseconds, :microsecond)
+    |> Enum.reduce_while({origin, amount_in_microseconds}, fn
+      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
+        maybe_result = DateTime.add(slot.to, rest_to_add_in_microseconds, :microsecond)
 
-      if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
-        do: {:halt, maybe_result},
-        else: {:cont, rest_to_add_in_microseconds + Slot.duration(slot, :microsecond)}
+        if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
+          do: {:halt, maybe_result},
+          else:
+            {:cont,
+             {maybe_result, rest_to_add_in_microseconds + Slot.duration(slot, :microsecond)}}
     end)
-    |> DateTime.truncate(unit)
+    |> case do
+      %DateTime{} = result ->
+        DateTime.truncate(result, unit)
+
+      {%DateTime{} = result, rest} when is_integer(rest) ->
+        DateTime.add(result, rest, :microsecond)
+    end
   end
 
   @spec wrap_result(slots :: Enumerable.t(), count :: count()) :: Slot.t() | Enumerable.t()

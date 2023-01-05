@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.7.2`** — `Slots.merge/1`
 - **`0.7.1`** — treat infinite slot as special not-covering anything
 - **`0.7.0`** — `merge/2` is 6× faster, `Slot.neighbour?/2`, `Tempus.slice/4`, `Tempus.drop_while/2`, `Tempus.take_while/2`
 - **`0.6.0`** — compatibility with _Elixir v1.14_ (no greek in variables names) meh
