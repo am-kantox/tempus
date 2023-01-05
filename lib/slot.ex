@@ -66,6 +66,9 @@ defmodule Tempus.Slot do
   """
   def cover?(slot, dt, strict? \\ false)
 
+  def cover?(%Slot{from: nil, to: nil}, _, _),
+    do: false
+
   def cover?(%Slot{from: nil, to: %DateTime{} = to}, %DateTime{} = dt, true),
     do: DateTime.compare(to, dt) == :gt
 

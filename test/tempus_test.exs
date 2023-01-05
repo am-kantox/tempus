@@ -5,6 +5,7 @@ defmodule Tempus.Test do
   doctest Tempus.Slots
 
   alias Tempus.Slots
+  # alias Kantox.Commons.CurrencyPair, as: Pair
 
   test "consuming stream" do
     holidays = [~D|2020-08-06|, ~D|2020-08-13|]
@@ -28,6 +29,27 @@ defmodule Tempus.Test do
     plus_zero_wdays = Tempus.days_ahead(schedule, ~D|2020-08-06|, 0)
     assert Date.from_iso8601!("2020-08-07") == hd(plus_zero_wdays)
   end
+
+  # test "free?/3" do
+  #   close = fn
+  #     true -> DateTime.from_naive!(~N|2018-01-04 21:00:00|, "America/New_York")
+  #     false -> DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York")
+  #   end
+
+  #   open = DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
+
+  #   assert Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(false).from, -1, :minute))
+  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(false).from, 1, :minute))
+
+  #   assert Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, 1, :minute))
+  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, -1, :minute))
+
+  #   assert Tempus.free?(Pair.new!("USDILS"), DateTime.add(close.(true).from, -1, :minute))
+  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(true).from, 1, :minute))
+
+  #   assert Tempus.free?(Pair.new!("USDILS"), DateTime.add(open, 1, :minute))
+  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, -1, :minute))
+  # end
 
   test "slice/4" do
     slots =

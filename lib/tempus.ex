@@ -33,10 +33,10 @@ defmodule Tempus do
   """
   def free?(slots, slot, method \\ :smart)
 
+  def free?(%Slots{slots: []}, _, _), do: true
+
   def free?(%Slots{} = slots, %Slot{} = slot, :size),
     do: Slots.size(Slots.add(slots, slot)) == Slots.size(slots) + 1
-
-  def free?(%Slots{slots: []}, %Slot{}, :smart), do: true
 
   def free?(%Slots{slots: slots}, %Slot{} = origin, :smart) do
     slots
