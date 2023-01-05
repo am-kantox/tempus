@@ -420,6 +420,10 @@ defmodule Tempus do
   @telemetria level: :debug
   def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second)
 
+  def add(%Slots{slots: []}, origin, amount_to_add, unit) do
+    DateTime.add(origin, amount_to_add, unit)
+  end
+
   def add(slots, origin, 0, unit) do
     %{from: from} = next_free(slots, origin: origin)
 
