@@ -343,7 +343,24 @@ defmodule Tempus.Slots do
     import Inspect.Algebra
 
     def inspect(%Tempus.Slots{slots: slots}, opts) do
-      concat(["#Slots<", to_doc(Enum.to_list(slots), opts), ">"])
+      inner_doc =
+        opts.custom_options
+        |> Keyword.get(:truncate, false)
+        |> case do
+          false -> false
+          true -> 0
+          i when is_integer(i) and i < length(slots) - 2 -> i
+          _ -> false
+        end
+        |> case do
+          i when is_integer(i) and i >= 0 ->
+            [hd(slots), "… ‹#{length(slots) - 2 - i} more› …" | Enum.slice(slots, -i - 1, i + 1)]
+
+          _ ->
+            slots
+        end
+
+      concat(["#Slots<", to_doc(inner_doc, opts), ">"])
     end
   end
 end

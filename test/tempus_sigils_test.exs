@@ -40,5 +40,23 @@ defmodule Tempus.Sigils.Test do
              # credo:disable-for-next-line
              IO.inspect(~I[2021-03-30]d, custom_options: [fancy: :emoji])
            end) == "⌚<2021-03-30T00:00:00.000000Z → 2021-03-30T23:59:59.999999Z>\n"
+
+    slots =
+      Enum.into(
+        [~D|2020-08-06|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|, ~D|2020-08-14|],
+        %Tempus.Slots{}
+      )
+
+    assert capture_io(fn ->
+             # credo:disable-for-next-line
+             IO.inspect(slots, custom_options: [truncate: true, fancy: :emoji])
+           end) ==
+             "#Slots<[⌚<2020-08-06T00:00:00.000000Z → 2020-08-06T23:59:59.999999Z>,\n \"… ‹3 more› …\",\n ⌚<2020-08-14T00:00:00.000000Z → 2020-08-14T23:59:59.999999Z>]>\n"
+
+    assert capture_io(fn ->
+             # credo:disable-for-next-line
+             IO.inspect(slots, custom_options: [truncate: 1, fancy: :emoji])
+           end) ==
+             "#Slots<[⌚<2020-08-06T00:00:00.000000Z → 2020-08-06T23:59:59.999999Z>,\n \"… ‹2 more› …\",\n ⌚<2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z>,\n ⌚<2020-08-14T00:00:00.000000Z → 2020-08-14T23:59:59.999999Z>]>\n"
   end
 end
