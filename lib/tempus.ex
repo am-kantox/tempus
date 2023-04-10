@@ -39,32 +39,15 @@ defmodule Tempus do
     do: Slots.size(Slots.add(slots, slot)) == Slots.size(slots) + 1
 
   def free?(%Slots{slots: slots}, %Slot{} = origin, :smart) do
-    slots
-    |> Enum.reduce_while(nil, fn
-      %Slot{} = current, nil ->
-        if Date.compare(current.from, origin.to) == :gt,
-          do: {:halt, current},
-          else: {:cont, current}
-
-      %Slot{} = current, %Slot{} = previous ->
-        if DateTime.compare(previous.to, origin.from) == :lt do
-          if DateTime.compare(current.to, origin.from) == :lt do
-            {:cont, current}
-          else
-            if DateTime.compare(current.from, origin.to) == :gt do
-              {:halt, current}
-            else
-              {:halt, nil}
-            end
-          end
-        else
-          {:halt, nil}
+    Enum.reduce_while(slots, true, fn
+      %Slot{} = current, true ->
+        case Slot.compare(current, origin, true) do
+          :gt -> {:halt, true}
+          :eq -> {:halt, false}
+          :joint -> {:halt, false}
+          :lt -> {:cont, true}
         end
     end)
-    |> case do
-      nil -> false
-      %Slot{} -> true
-    end
   end
 
   def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)
