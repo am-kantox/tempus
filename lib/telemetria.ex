@@ -20,9 +20,10 @@ defmodule Tempus.Telemetria do
 
       {true, true, compiler?} ->
         if not compiler? do
-          Mix.shell().warn(
+          IO.warn(
             ":telemetria has been enabled for `Tempus` but the compiler is not specified, " <>
-              "please include it into `compilers:` list in your `project` callback"
+              "please include it into `compilers:` list in your `project` callback",
+            []
           )
         end
 

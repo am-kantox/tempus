@@ -7,11 +7,20 @@ config :logger,
     [level_lower_than: :info]
   ]
 
+config :tempus, telemetria?: true
+
 config :telemetria,
   otp_app: :tempus,
-  enabled: false,
+  enabled: true,
+  polling: [enabled: false],
   applications: [],
-  events: [],
-  polling: [enabled: false]
+  events: [
+    [:tempus, :add],
+    [:tempus, :next_busy],
+    [:tempus, :next_free],
+    [:tempus, :slots, :add],
+    [:tempus, :slots, :inverse],
+    [:tempus, :slots, :merge]
+  ]
 
 if File.exists?("config/#{Mix.env()}.exs"), do: import_config("#{Mix.env()}.exs")

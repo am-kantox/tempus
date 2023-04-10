@@ -2,17 +2,18 @@ defmodule Tempus.MixProject do
   use Mix.Project
 
   @app :tempus
-  @version "0.8.0"
+  @version "0.8.1"
 
   def project do
     [
       app: @app,
-      name: "Tempus",
       version: @version,
+      name: "Tempus",
       elixir: "~> 1.9",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
       consolidate_protocols: Mix.env() not in [:dev, :test],
+      preferred_cli_env: [quality: :ci, "quality.ci": :ci],
       description: description(),
       package: package(),
       deps: deps(),
@@ -39,7 +40,7 @@ defmodule Tempus.MixProject do
   defp deps do
     [
       {:telemetria, "~> 0.8", runtime: false, optional: true},
-      {:avl_tree, "~> 1.0"},
+      {:avl_tree, "~> 1.0", app: false},
       # dev / test
       {:benchee, "~> 1.0", only: [:dev, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
@@ -93,7 +94,14 @@ defmodule Tempus.MixProject do
 
   defp compilers(:test), do: Mix.compilers()
   defp compilers(:ci), do: Mix.compilers()
-  defp compilers(_), do: [:telemetria | Mix.compilers()]
+
+  defp compilers(_) do
+    if Application.get_env(:tempus, :telemetria?, false) do
+      [:telemetria | Mix.compilers()]
+    else
+      Mix.compilers()
+    end
+  end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:dev), do: ["lib", "test/support"]
