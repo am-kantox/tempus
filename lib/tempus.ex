@@ -1,9 +1,15 @@
 defmodule Tempus do
   @moduledoc """
-  Documentation for `Tempus`.
+  `Tempus` is a library to deal with timeslots.
+
+  It aims to be a fast yet easy to use implementation of a schedule of any type,
+    including but not limited to free/busy time schedules.
+
+  The example of it might be a calendar software, where slots might be marked as
+    free, or busy. It also allows simple arithmetics with schedules, like adding
+    five days or subtracting 7 hours 30 minutes from now, considering busy slots.
   """
 
-  use Boundary, exports: [Slot, Slots]
   use Tempus.Telemetria, action: :import
 
   alias Tempus.{Slot, Slots}

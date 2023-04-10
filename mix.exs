@@ -21,8 +21,10 @@ defmodule Tempus.MixProject do
       docs: docs(),
       releases: [],
       dialyzer: [
+        flags: ["-Wunmatched_returns", :error_handling, :underspecs],
         plt_file: {:no_warn, ".dialyzer/dialyzer.plt"},
-        plt_add_deps: :transitive,
+        plt_add_deps: :app_tree,
+        plt_add_apps: [:mix],
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
       ]
@@ -36,7 +38,6 @@ defmodule Tempus.MixProject do
 
   defp deps do
     [
-      {:boundary, "~> 0.4"},
       {:telemetria, "~> 0.8", runtime: false, optional: true},
       {:avl_tree, "~> 1.0"},
       # dev / test
@@ -90,9 +91,9 @@ defmodule Tempus.MixProject do
     ]
   end
 
-  defp compilers(:dev), do: [:boundary, :telemetria | Mix.compilers()]
-  defp compilers(:test), do: [:telemetria | Mix.compilers()]
-  defp compilers(_), do: Mix.compilers()
+  defp compilers(:test), do: Mix.compilers()
+  defp compilers(:ci), do: Mix.compilers()
+  defp compilers(_), do: [:telemetria | Mix.compilers()]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:dev), do: ["lib", "test/support"]

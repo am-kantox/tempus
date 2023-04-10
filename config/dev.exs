@@ -1,3 +1,3 @@
 import Config
 
-config :tempus, :fancy_inspect, true
+config :tempus, :inspect, :sigil

@@ -457,8 +457,10 @@ defmodule Tempus.Slot do
   end
 
   defimpl Inspect do
+    @moduledoc false
+
     import Inspect.Algebra
-    @fancy_inspect Application.compile_env(:tempus, :fancy_inspect, false)
+    @fancy_inspect Application.compile_env(:tempus, :inspect, :sigil)
 
     def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
       opts.custom_options
@@ -475,8 +477,16 @@ defmodule Tempus.Slot do
 
           concat([tag, "<", value, ">"])
 
-        _ ->
+        false ->
           concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+
+        :sigil ->
+          case {from, to} do
+            {nil, nil} -> "%Tempus.Slot{}"
+            {from, nil} -> "%Tempus.Slot{from: " <> inspect(from) <> "}"
+            {nil, to} -> "%Tempus.Slot{to: " <> inspect(to) <> "}"
+            {from, to} -> "~I[#{from}|#{to}]"
+          end
       end
     end
 

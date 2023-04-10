@@ -7,7 +7,7 @@ defmodule Tempus.ArgumentError do
   def exception(opts) do
     expected = Keyword.fetch!(opts, :expected)
     passed = Keyword.fetch!(opts, :passed)
-    message = "Invalid argument; expected `#{expected}`, passed: `#{inspect(passed)}`"
+    message = "invalid argument: expected ‹#{expected}›, got: ‹#{inspect(passed)}›"
 
     %__MODULE__{message: message, expected: expected, passed: passed}
   end

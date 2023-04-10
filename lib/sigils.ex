@@ -1,5 +1,5 @@
 defmodule Tempus.Sigils do
-  @moduledoc "Handy sigils to instantiate `Tempus.Slot`"
+  @moduledoc "Handy sigils to instantiate `Tempus.Slot` and `Tempus.Slots`"
 
   alias Tempus.Slot
 
@@ -20,22 +20,41 @@ defmodule Tempus.Sigils do
 
   """
   defmacro sigil_I({:<<>>, _, [binary]}, modifiers) when is_binary(binary) do
-    module =
-      case modifiers do
-        [?d] -> Date
-        [?t] -> Time
-        [] -> DateTime
-      end
+    by_mod = fn
+      ?d -> Date
+      ?t -> Time
+      ?u -> DateTime
+    end
 
-    from_iso = &(&1 |> module.from_iso8601() |> elem(1) |> Slot.wrap())
+    from_iso =
+      modifiers
+      |> case do
+        [] -> [DateTime, DateTime]
+        [ft] when ft in 'dtu' -> List.duplicate(by_mod.(ft), 2)
+        [f, t] = mods when f in 'dtu' and t in 'dtu' -> Enum.map(mods, by_mod)
+      end
+      |> Enum.map(&Function.capture(&1, :from_iso8601, 1))
 
     result =
       binary
       |> String.split("|")
-      |> case do
-        [part] -> from_iso.(part)
-        [_, _] = interval -> interval |> Enum.map(from_iso) |> Slot.join()
-      end
+      |> Enum.zip(from_iso)
+      |> Enum.map(fn {value, mapper} ->
+        case mapper.(value) do
+          {:ok, result} ->
+            Slot.wrap(result)
+
+          {:ok, result, _} ->
+            Slot.wrap(result)
+
+          {:error, error} ->
+            raise CompileError,
+              file: __CALLER__.file,
+              line: __CALLER__.line,
+              description: inspect(error)
+        end
+      end)
+      |> Slot.join()
       |> Macro.escape()
 
     quote(generated: true, location: :keep, do: unquote(result))
