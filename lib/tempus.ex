@@ -118,7 +118,7 @@ defmodule Tempus do
     |> Slots.wrap_unsafe()
   end
 
-  @spec days_add(slots :: Slots.t(), opts :: options()) :: Date.t()
+  @spec days_add(slots :: Slots.t(), opts :: options()) :: [Date.t()]
   @doc since: "0.2.0"
   @doc """
   Returns the reversed list of free days after origin.
@@ -156,7 +156,7 @@ defmodule Tempus do
   end
 
   @doc deprecated: "Use days_add/2 instead"
-  @spec days_ahead(slots :: Slots.t(), origin :: Date.t(), count :: integer()) :: Date.t()
+  @spec days_ahead(slots :: Slots.t(), origin :: Date.t(), count :: integer()) :: [Date.t()]
   @doc """
   Returns the reversed list of free days after origin.
 
@@ -175,7 +175,7 @@ defmodule Tempus do
     do: days_add(slots, origin: origin, count: count, direction: :fwd)
 
   @doc deprecated: "Use days_add/2 with negative count or `:bwd` forth parameter instead"
-  @spec days_ago(slots :: Slots.t(), origin :: Date.t(), count :: integer()) :: Date.t()
+  @spec days_ago(slots :: Slots.t(), origin :: Date.t(), count :: integer()) :: [Date.t()]
   @doc """
   Returns the reversed list of free days after origin.
 
