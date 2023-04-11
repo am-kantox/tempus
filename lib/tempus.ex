@@ -56,7 +56,11 @@ defmodule Tempus do
       iex> Tempus.guess("2023-04-10T10:00:00Z")
       {:ok, Tempus.Slot.wrap(~U[2023-04-10T10:00:00Z])}
       iex> Tempus.guess("20230410T235007.123+0230")
-      {:ok, Tempus.Slot.wrap(~U[2023-04-10T21:20:07.123Z])}
+      if Version.compare(System.version(), "1.14.0") == :lt do
+        {:error, :invalid_format}
+      else
+        {:ok, Tempus.Slot.wrap(~U[2023-04-10T21:20:07.123Z])}
+      end
       iex> Tempus.guess("2023-04-10-15")
       {:error, :invalid_format}
   """
@@ -81,7 +85,11 @@ defmodule Tempus do
       iex> Tempus.guess("2023-04-10T10:00:00Z", "2023-04-12")
       {:ok, ~I[2023-04-10 10:00:00Z|2023-04-12 23:59:59.999999Z]}
       iex> Tempus.guess("20230410T235007.123+0230", "2023-04-12")
-      {:ok, ~I[2023-04-10 21:20:07.123Z|2023-04-12 23:59:59.999999Z]}
+      if Version.compare(System.version(), "1.14.0") == :lt do
+        {:error, {:invalid_arguments, [from: :invalid_format]}}
+      else
+        {:ok, ~I[2023-04-10 21:20:07.123Z|2023-04-12 23:59:59.999999Z]}
+      end
       iex> Tempus.guess("2023-04-10-15", :ok)
       {:error, {:invalid_arguments, [from: :invalid_format, to: :invalid_argument]}}
   """
