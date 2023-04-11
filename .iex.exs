@@ -37,6 +37,7 @@ IEx.configure(
     |> IO.chardata_to_string()
 )
 
+import Tempus.{Guards, Sigils}
 alias Tempus.{Slot, Slots}
 
 microseconds_in_week = 604_800_000_000

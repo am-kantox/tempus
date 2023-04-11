@@ -14,12 +14,120 @@ defmodule Tempus do
 
   alias Tempus.{Slot, Slots}
 
+  @typedoc "Direction for slots navigation"
   @type direction :: :fwd | :bwd
+  @typedoc "Number of slots (`:stream` means lazy folding, unknown upfront)"
   @type count :: :infinity | :stream | non_neg_integer()
+  @typedoc "Navigation option"
   @type option ::
           {:origin, Slot.origin()} | {:count, count() | neg_integer()} | {:direction, direction()}
+  @typedoc "Argument containing navigation options"
   @type options :: [option()]
   @typep options_tuple :: {Slot.origin(), count(), 1 | -1}
+
+  defdelegate slot(from, to), to: Tempus.Slot, as: :new
+  defdelegate slot!(from, to), to: Tempus.Slot, as: :new!
+
+  @doc """
+  Syntactic sugar for `|> Enum.into(%Slots{})`.
+
+  ## Examples
+
+      iex> [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-12|)
+      ...> ] |> Tempus.slots()
+      %Tempus.Slots{
+        slots: [
+          %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]},
+          %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
+          %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-12 23:59:59.999999Z]}]}
+  """
+  def slots(enum), do: Enum.into(enum, %Slots{})
+
+  @doc """
+  Helper to instantiate slot from any known format, by wrapping the argument.
+
+  ## Examples
+
+      iex> Tempus.guess("2023-04-10")
+      {:ok, Tempus.Slot.wrap(~D[2023-04-10])}
+      iex> Tempus.guess("2023-04-10T10:00:00Z")
+      {:ok, Tempus.Slot.wrap(~U[2023-04-10T10:00:00Z])}
+      iex> Tempus.guess("20230410T235007.123+0230")
+      {:ok, Tempus.Slot.wrap(~U[2023-04-10T21:20:07.123Z])}
+      iex> Tempus.guess("2023-04-10-15")
+      {:error, :invalid_format}
+  """
+  @spec guess(input :: nil | binary()) :: {:ok, Slot.t()} | {:error, any()}
+  def guess(input) do
+    input
+    |> do_guess()
+    |> case do
+      {:ok, origin} -> {:ok, Slot.wrap(origin)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  Helper to instantiate slot from any known format, by joining the arguments.
+
+  ## Examples
+
+      iex> import Tempus.Sigils
+      iex> Tempus.guess("2023-04-10", "2023-04-12")
+      {:ok, ~I[2023-04-10 00:00:00.000000Z|2023-04-12 23:59:59.999999Z]}
+      iex> Tempus.guess("2023-04-10T10:00:00Z", "2023-04-12")
+      {:ok, ~I[2023-04-10 10:00:00Z|2023-04-12 23:59:59.999999Z]}
+      iex> Tempus.guess("20230410T235007.123+0230", "2023-04-12")
+      {:ok, ~I[2023-04-10 21:20:07.123Z|2023-04-12 23:59:59.999999Z]}
+      iex> Tempus.guess("2023-04-10-15", :ok)
+      {:error, {:invalid_arguments, [from: :invalid_format, to: :invalid_argument]}}
+  """
+  @spec guess(from :: nil | binary(), to :: nil | binary()) :: {:ok, Slot.t()} | {:error, any()}
+  def guess(from, to) do
+    [from, to]
+    |> Enum.map(&guess/1)
+    |> case do
+      [{:ok, from}, {:ok, to}] -> {:ok, Slot.join(from, to)}
+      [{:error, from}, {:error, to}] -> {:error, {:invalid_arguments, from: from, to: to}}
+      [{:error, from}, _] -> {:error, {:invalid_arguments, from: from}}
+      [_, {:error, to}] -> {:error, {:invalid_arguments, to: to}}
+    end
+  end
+
+  defp do_guess(nil), do: {:ok, nil}
+
+  defp do_guess(<<_::binary-size(4), ?-, _::binary-size(2), ?-, _::binary-size(2)>> = date),
+    do: Date.from_iso8601(date)
+
+  defp do_guess(<<_::binary-size(2), ?:, _::binary-size(2), ?:, _::binary-size(2)>> = time),
+    do: Time.from_iso8601(time)
+
+  defp do_guess(input) when is_binary(input) do
+    attempts = [
+      fn input ->
+        with {:ok, value, _} <- DateTime.from_iso8601(input, :extended), do: {:ok, value}
+      end,
+      fn input ->
+        with {:ok, value, _} <- DateTime.from_iso8601(input, :basic), do: {:ok, value}
+      end,
+      fn input -> Date.from_iso8601(input) end,
+      fn input -> Time.from_iso8601(input) end
+    ]
+
+    Enum.reduce_while(attempts, {:error, :invalid_format}, fn guesser, acc ->
+      case guesser.(input) do
+        {:ok, result} -> {:halt, {:ok, result}}
+        {:error, :invalid_date} -> {:halt, {:error, :invalid_date}}
+        {:error, :invalid_time} -> {:halt, {:error, :invalid_time}}
+        _ -> {:cont, acc}
+      end
+    end)
+  end
+
+  defp do_guess(_), do: {:error, :invalid_argument}
 
   @spec free?(slots :: Slots.t(), slot :: Slot.origin(), method :: :smart | :size) ::
           boolean() | no_return

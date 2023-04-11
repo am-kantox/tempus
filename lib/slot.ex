@@ -7,6 +7,8 @@ defmodule Tempus.Slot do
   """
   alias __MODULE__
 
+  import Tempus.Guards
+
   @typedoc "A timeslot to be used in `Tempus`"
   @type t :: %__MODULE__{
           from: nil | DateTime.t(),
@@ -17,6 +19,64 @@ defmodule Tempus.Slot do
   @type origin :: Slot.t() | Date.t() | DateTime.t() | Time.t() | nil
 
   defstruct [:from, :to]
+
+  @spec new([{:from, origin()} | {:to, origin()}]) :: {:ok, t()} | {:error, any()}
+  @doc """
+  Creates new slot using `arg[:from]` as a starting origin and `arg[:to]` and an ending origin.
+
+  ## Examples
+
+      iex> Tempus.Slot.new(from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|)
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}}
+      iex> Tempus.Slot.new(%{from: ~D|2015-09-30|, to: ~U|2015-10-01T12:00:00Z|})
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}}
+  """
+  def new(from_to), do: new(from_to[:from], from_to[:to])
+
+  @spec new(from :: origin(), to :: origin()) :: {:ok, t()} | {:error, any()}
+  @doc """
+  Creates new slot using `from` as a starting origin and `to` and an ending origin.
+  See `new/1` for more readable implementation.
+
+  ## Examples
+
+      iex> Tempus.Slot.new(~U|2015-09-30 00:00:00Z|, ~U|2015-10-01 01:00:00Z|)
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}}
+      iex> Tempus.Slot.new(~D|2015-09-30|, ~U|2015-10-01T12:00:00Z|)
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}}
+      iex> Tempus.Slot.new(:ok, :ok)
+      {:error, :invalid_input}
+  """
+  def new(from, to) when not is_origin(from) when not is_origin(to), do: {:error, :invalid_input}
+  def new(nil, nil), do: {:ok, %Tempus.Slot{from: nil, to: nil}}
+  def new(from, nil), do: {:ok, %Tempus.Slot{from: wrap(from).from, to: nil}}
+  def new(nil, to), do: {:ok, %Tempus.Slot{from: nil, to: wrap(to).to}}
+  def new(from, to), do: {:ok, [from, to] |> Enum.map(&wrap/1) |> join()}
+
+  @spec new!(from :: origin(), to :: origin()) :: t() | no_return
+
+  @doc """
+  Creates new slot using `from` as a starting origin and `to` and an ending origin.
+  Unlike `new/1`, this function raises on malformed input.
+
+  ## Examples
+
+      iex> Tempus.Slot.new!(~U|2015-09-30 00:00:00Z|, ~U|2015-10-01 01:00:00Z|)
+      %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}
+      iex> Tempus.Slot.new!(~D|2015-09-30|, ~U|2015-10-01T12:00:00Z|)
+      %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}
+      iex> Tempus.Slot.new!(:ok, :ok)
+      ** (ArgumentError) malformed from/to argument, expected `origin`
+  """
+  def new!(from, to) do
+    case new(from, to) do
+      {:ok, slot} ->
+        slot
+
+      {:error, :invalid_input} ->
+        raise ArgumentError, message: "malformed from/to argument, expected `origin`"
+    end
+  end
 
   @spec valid?(slot :: Slot.t()) :: boolean()
   @doc """
@@ -66,52 +126,17 @@ defmodule Tempus.Slot do
   """
   def cover?(slot, dt, strict? \\ false)
 
-  def cover?(%Slot{from: nil, to: nil}, _, _),
-    do: false
+  def cover?(%Slot{} = slot, %DateTime{} = dt, _) when not is_covered(dt, slot), do: false
+  def cover?(%Slot{} = slot, %DateTime{} = dt, true) when is_slot_border(dt, slot), do: false
+  def cover?(%Slot{}, %DateTime{}, _), do: true
+  def cover?(%Slot{} = slot, %Slot{} = dt, _) when not is_covered(dt, slot), do: false
 
-  def cover?(%Slot{from: nil, to: %DateTime{} = to}, %DateTime{} = dt, true),
-    do: DateTime.compare(to, dt) == :gt
+  def cover?(%Slot{} = slot, %Slot{from: from, to: to}, true)
+      when is_slot_border(from, slot) or is_slot_border(to, slot),
+      do: false
 
-  def cover?(%Slot{from: %DateTime{} = from, to: nil}, %DateTime{} = dt, true),
-    do: DateTime.compare(from, dt) == :lt
-
-  def cover?(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}, %DateTime{} = dt, true),
-    do: DateTime.compare(from, dt) == :lt and DateTime.compare(to, dt) == :gt
-
-  def cover?(%Slot{from: from, to: to} = slot, %DateTime{} = dt, false),
-    do:
-      cover?(slot, dt, true) or
-        (not is_nil(from) and DateTime.compare(from, dt) == :eq) or
-        (not is_nil(to) and DateTime.compare(to, dt) == :eq)
-
-  def cover?(%Slot{} = slot, %Date{} = dt, strict?),
-    do: cover?(slot, wrap(dt, slot.from || slot.to), strict?)
-
-  def cover?(%Slot{} = slot, %Time{} = dt, strict?),
-    do: cover?(slot, wrap(dt, slot.from || slot.to), strict?)
-
-  def cover?(%Slot{from: nil, to: %DateTime{}}, %Slot{from: nil, to: %DateTime{}}, true),
-    do: false
-
-  def cover?(
-        %Slot{from: nil, to: %DateTime{} = s_to},
-        %Slot{from: nil, to: %DateTime{} = dt_to},
-        false
-      ),
-      do: DateTime.compare(s_to, dt_to) in [:lt, :eq]
-
-  def cover?(%Slot{from: %DateTime{}, to: nil}, %Slot{from: %DateTime{}, to: nil}, true),
-    do: false
-
-  def cover?(
-        %Slot{from: %DateTime{} = s_from, to: nil},
-        %Slot{from: %DateTime{} = dt_from, to: nil},
-        false
-      ),
-      do: DateTime.compare(s_from, dt_from) in [:gt, :eq]
-
-  def cover?(%Slot{} = slot, %Slot{from: from, to: to}, strict?),
-    do: cover?(slot, from, strict?) and cover?(slot, to, strict?)
+  def cover?(%Slot{}, %Slot{}, _), do: true
+  def cover?(%Slot{} = slot, origin, strict?), do: cover?(slot, wrap(origin), strict?)
 
   @spec disjoint?(s1 :: origin(), s2 :: origin()) :: boolean()
   @doc """
@@ -207,23 +232,29 @@ defmodule Tempus.Slot do
       #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
   """
   def join([]), do: %Slot{from: nil, to: nil}
+  def join([slot | slots]), do: do_join(slots, wrap(slot))
 
-  def join([slot | slots]) do
-    Enum.reduce(slots, wrap(slot), fn slot, acc ->
-      slot = wrap(slot)
+  defp do_join([], acc), do: acc
+  defp do_join(_, %Slot{from: nil, to: nil} = inf), do: inf
 
-      from =
+  defp do_join([slot | slots], acc) do
+    slot = wrap(slot)
+
+    from =
+      if not is_nil(slot.from) and not is_nil(acc.from) do
         if DateTime.compare(slot.from, acc.from) == :lt,
           do: slot.from,
           else: acc.from
+      end
 
-      to =
+    to =
+      if not is_nil(slot.to) and not is_nil(acc.to) do
         if DateTime.compare(slot.to, acc.to) == :gt,
           do: slot.to,
           else: acc.to
+      end
 
-      %Slot{from: from, to: to}
-    end)
+    do_join(slots, %Slot{from: from, to: to})
   end
 
   @spec join(Slot.t(), Slot.t()) :: Slot.t()
@@ -400,6 +431,8 @@ defmodule Tempus.Slot do
       }
     }
   end
+
+  def wrap(_, _), do: %Slot{from: nil, to: nil}
 
   @doc false
   @spec shift(

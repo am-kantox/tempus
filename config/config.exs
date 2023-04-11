@@ -11,7 +11,7 @@ config :tempus, telemetria?: true
 
 config :telemetria,
   otp_app: :tempus,
-  enabled: true,
+  enabled: false,
   polling: [enabled: false],
   applications: [],
   events: [

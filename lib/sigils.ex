@@ -37,7 +37,7 @@ defmodule Tempus.Sigils do
 
     result =
       binary
-      |> String.split("|")
+      |> String.split(~w"| → -> >")
       |> Enum.zip(from_iso)
       |> Enum.map(fn {value, mapper} ->
         case mapper.(value) do
@@ -51,7 +51,7 @@ defmodule Tempus.Sigils do
             raise CompileError,
               file: __CALLER__.file,
               line: __CALLER__.line,
-              description: inspect(error)
+              description: "`~I` sigil input is malformed, error: " <> inspect(error)
         end
       end)
       |> Slot.join()
