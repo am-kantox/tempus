@@ -105,18 +105,30 @@ defmodule Tempus do
   defp do_guess(<<_::binary-size(2), ?:, _::binary-size(2), ?:, _::binary-size(2)>> = time),
     do: Time.from_iso8601(time)
 
-  defp do_guess(input) when is_binary(input) do
-    attempts = [
-      fn input ->
-        with {:ok, value, _} <- DateTime.from_iso8601(input, :extended), do: {:ok, value}
-      end,
-      fn input ->
-        with {:ok, value, _} <- DateTime.from_iso8601(input, :basic), do: {:ok, value}
-      end,
-      fn input -> Date.from_iso8601(input) end,
-      fn input -> Time.from_iso8601(input) end
-    ]
+  if Version.compare(System.version(), "1.14.0") == :lt do
+    defp do_guess(input) when is_binary(input) do
+      [
+        &with({:ok, value, _} <- DateTime.from_iso8601(&1), do: {:ok, value}),
+        &Date.from_iso8601/1,
+        &Time.from_iso8601/1
+      ]
+      |> do_guess_reduce(input)
+    end
+  else
+    defp do_guess(input) when is_binary(input) do
+      [
+        &with({:ok, value, _} <- DateTime.from_iso8601(&1, :extended), do: {:ok, value}),
+        &with({:ok, value, _} <- DateTime.from_iso8601(&1, :basic), do: {:ok, value}),
+        &Date.from_iso8601/1,
+        &Time.from_iso8601/1
+      ]
+      |> do_guess_reduce(input)
+    end
+  end
 
+  defp do_guess(_), do: {:error, :invalid_argument}
+
+  defp do_guess_reduce(attempts, input) do
     Enum.reduce_while(attempts, {:error, :invalid_format}, fn guesser, acc ->
       case guesser.(input) do
         {:ok, result} -> {:halt, {:ok, result}}
@@ -126,8 +138,6 @@ defmodule Tempus do
       end
     end)
   end
-
-  defp do_guess(_), do: {:error, :invalid_argument}
 
   @spec free?(slots :: Slots.t(), slot :: Slot.origin(), method :: :smart | :size) ::
           boolean() | no_return
