@@ -9,16 +9,32 @@ defmodule Tempus.Sigils do
   characters, except for the escaping of the closing sigil character
   itself.
 
+  _Allowed separators:_ `|`, `→`, `->`, `..` (might be surrounded by spaces)
+
+  _Allowed modifiers:_
+
+  - _none_ — expects two instances of `DateTime`
+  - _single letter_, one of `d`, `t`, `u` — both values are expected to be of that type
+  - _any combination_ of two letters `d`, `t`, `u` — the values are treated respectively
+  - `g` — the value types are to be guessed
+
   ## Examples
       iex> import Tempus.Sigils
       iex> ~I(2021-03-30T06:35:40Z|2021-03-30T06:36:00Z)
       %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}
-      iex> ~I(2021-03-30|2021-03-31)d
+      iex> ~I(2021-03-30 → 2021-03-31)d
       %Tempus.Slot{from: ~U[2021-03-30 00:00:00.000000Z], to: ~U[2021-03-31 23:59:59.999999Z]}
       iex> ~I(2021-03-30)d
       %Tempus.Slot{from: ~U[2021-03-30 00:00:00.000000Z], to: ~U[2021-03-30 23:59:59.999999Z]}
+      iex> ~I(2021-03-30 06:35:40Z .. 2021-03-30 06:36:00Z)g
+      %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}
 
   """
+  defmacro sigil_I({:<<>>, _, [binary]}, 'g') when is_binary(binary) do
+    from_iso = List.duplicate(&Tempus.guess/1, 2)
+    do_ast(binary, from_iso, __CALLER__)
+  end
+
   defmacro sigil_I({:<<>>, _, [binary]}, modifiers) when is_binary(binary) do
     by_mod = fn
       ?d -> Date
@@ -35,9 +51,13 @@ defmodule Tempus.Sigils do
       end
       |> Enum.map(&Function.capture(&1, :from_iso8601, 1))
 
+    do_ast(binary, from_iso, __CALLER__)
+  end
+
+  defp do_ast(binary, from_iso, caller) do
     result =
-      binary
-      |> String.split(~w"| → -> >")
+      ~r{\s*(?:\||→|\->|\.\.)\s*}
+      |> Regex.split(binary)
       |> Enum.zip(from_iso)
       |> Enum.map(fn {value, mapper} ->
         case mapper.(value) do
@@ -49,8 +69,8 @@ defmodule Tempus.Sigils do
 
           {:error, error} ->
             raise CompileError,
-              file: __CALLER__.file,
-              line: __CALLER__.line,
+              file: caller.file,
+              line: caller.line,
               description: "`~I` sigil input is malformed, error: " <> inspect(error)
         end
       end)

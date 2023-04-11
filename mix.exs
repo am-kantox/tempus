@@ -88,7 +88,10 @@ defmodule Tempus.MixProject do
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: "stuff/images",
       extras: ~w[README.md stuff/getting-started.md],
-      groups_for_modules: []
+      groups_for_modules: [
+        Helpers: [Tempus.Guards, Tempus.Sigils],
+        Slots: [Tempus.Slot, Tempus.Slots]
+      ]
     ]
   end
 

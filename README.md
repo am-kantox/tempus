@@ -13,7 +13,8 @@ end
 ```
 
 ## Changelog
-- **`0.8.0`** — improve sigils, prepared for `:tempus_sql`
+- **`0.9.0`** — `Tempus.Guards`, `Tempus.slot/{1,2}`, `Tempus.guess/1`, better sigils, prepared for `:tempus_sql`
+- **`0.8.0`** — improve `Tempus.Sigils`, prepared for `:tempus_sql`
 - **`0.7.3`** — `truncate: boolean() | non_neg_integer()` to truncate `Slots` inspection
 - **`0.7.2`** — `Slots.merge/1`
 - **`0.7.1`** — treat infinite slot as special not-covering anything
