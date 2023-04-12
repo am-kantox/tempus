@@ -54,10 +54,35 @@ defmodule Tempus.Sigils do
     do_ast(binary, from_iso, __CALLER__)
   end
 
-  defp do_ast(binary, from_iso, caller) do
+  @doc """
+  Parses the sigil-like binary representation of a `Tempus.Slot`.
+
+  ## Examples
+
+      iex> Tempus.Sigils.parse("2021-03-30T06:35:40Z|2021-03-30T06:36:00Z")
+      {:ok, %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}}
+  """
+  @spec parse(input :: binary()) :: {:ok, Slot.t()} | {:error, any()}
+  def parse(input) do
     result =
-      ~r{\s*(?:\||→|\->|\.\.)\s*}
-      |> Regex.split(binary)
+      input
+      |> do_split()
+      |> Enum.reduce_while([], fn s, acc ->
+        s
+        |> Tempus.guess()
+        |> case do
+          {:ok, slot} -> {:cont, [Slot.join([Slot.wrap(slot) | acc])]}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+
+    with [%Slot{} = slot] <- result, do: {:ok, slot}
+  end
+
+  defp do_ast(input, from_iso, caller) do
+    result =
+      input
+      |> do_split()
       |> Enum.zip(from_iso)
       |> Enum.map(fn {value, mapper} ->
         case mapper.(value) do
@@ -79,4 +104,6 @@ defmodule Tempus.Sigils do
 
     quote(generated: true, location: :keep, do: unquote(result))
   end
+
+  defp do_split(input), do: Regex.split(~r{\s*(?:\||→|\->|\.\.)\s*}, input)
 end

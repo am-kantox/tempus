@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.9.1`** — `Tempus.Sigils.parse/1`
 - **`0.9.0`** — `Tempus.Guards`, `Tempus.slot/{1,2}`, `Tempus.guess/1`, better sigils, prepared for `:tempus_sql`
 - **`0.8.0`** — improve `Tempus.Sigils`, prepared for `:tempus_sql`
 - **`0.7.3`** — `truncate: boolean() | non_neg_integer()` to truncate `Slots` inspection
