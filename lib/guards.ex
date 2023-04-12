@@ -109,7 +109,7 @@ defmodule Tempus.Guards do
                   is_nil(:erlang.map_get(:to, s))
 
   @doc """
-  Guard to validate whether the slot is open (has either end not set.)
+  Guard to validate whether the slot is open (has either end not set)
 
   Please note, that the slot having both ends set to `nil` is considered
     a special case and is not reported as _open_.
@@ -128,6 +128,30 @@ defmodule Tempus.Guards do
   defguard is_slot_border(dt, s)
            when is_slot(s) and is_datetime(dt) and
                   (is_slot_from_equal(s, dt) or is_slot_to_equal(s, dt))
+
+  @doc """
+  Guard to validate whether two slots are equal
+
+  ## Examples
+
+      iex> import Tempus.Guards, only: [is_slot_equal: 2]
+      ...> import Tempus.Sigils
+      ...> s1 = ~I[2023-04-09 00:00:00Z|2023-04-09 23:59:59.999999Z]
+      ...> s2 = Tempus.Slot.wrap(~D|2023-04-09|)
+      ...> s3 = ~I[2023-04-09 00:00:00Z|2023-04-09 23:59:59Z]
+      ...> is_slot_equal(s1, s1)
+      true
+      ...> is_slot_equal(s1, s2)
+      true
+      ...> is_slot_equal(s1, s3)
+      false
+
+  """
+  @spec is_slot_equal(Slot.t(), Slot.t()) :: boolean()
+  defguard is_slot_equal(s1, s2)
+           when is_slot(s1) and is_slot(s2) and
+                  is_datetime_equal(:erlang.map_get(:from, s1), :erlang.map_get(:from, s2)) and
+                  is_datetime_equal(:erlang.map_get(:to, s1), :erlang.map_get(:to, s2))
 
   @doc """
   Guard to validate one slot ovelaps another
