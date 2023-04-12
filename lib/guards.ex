@@ -224,6 +224,10 @@ defmodule Tempus.Guards do
   """
   def joint_in_delta?(s1, s2, _delta) when is_joint(s1, s2), do: true
 
+  def joint_in_delta?(s1, s2, delta) when is_coming_before(s2, s1) do
+    joint_in_delta?(s2, s1, delta)
+  end
+
   def joint_in_delta?(s1, s2, {delta_secs, delta_msecs})
       when is_coming_before(s1, s2) do
     {secs_from, msecs_from} = DateTime.to_gregorian_seconds(s2.from)
@@ -233,9 +237,5 @@ defmodule Tempus.Guards do
 
   def joint_in_delta?(s1, s2, delta) when is_coming_before(s1, s2) do
     joint_in_delta?(s1, s2, {delta, 0})
-  end
-
-  def joint_in_delta?(s1, s2, delta) when is_coming_before(s2, s1) do
-    joint_in_delta?(s2, s1, {delta, 0})
   end
 end
