@@ -98,6 +98,28 @@ defmodule Tempus.Slot do
 
   def valid?(_), do: false
 
+  @doc """
+  Splits the slot given asa first argument to two on borders given as a second slot.
+
+  ## Examples
+
+      iex> outer = Tempus.Slot.wrap(~D[2023-04-12])
+      ...> {:ok, inner} = Tempus.Slot.new(~U[2023-04-12 12:00:00Z], ~U[2023-04-12 13:00:00Z])
+      iex> Tempus.Slot.xor(outer, inner)
+      [%Tempus.Slot{from: ~U[2023-04-12 00:00:00.000000Z], to: ~U[2023-04-12 12:00:00Z]},
+       %Tempus.Slot{from: ~U[2023-04-12 13:00:00Z], to: ~U[2023-04-12 23:59:59.999999Z]}]
+      iex> Tempus.Slot.xor(outer, inner) == Tempus.Slot.xor(inner, outer)
+      true
+  """
+  @spec xor(outer :: Slot.t(), inner :: Slot.t()) :: [Slot.t()]
+  def xor(outer, inner) when is_coming_before(outer, inner), do: [outer, inner]
+  def xor(outer, inner) when is_coming_before(inner, outer), do: [inner, outer]
+
+  def xor(outer, inner) when is_slot_border(inner.from, outer) or is_slot_border(inner.to, outer),
+    do: [Slot.join(inner, outer)]
+
+  def xor(outer, inner), do: [Slot.new!(outer.from, inner.from), Slot.new!(inner.to, outer.to)]
+
   @spec cover?(slot :: Slot.t(), dt :: origin(), strict? :: boolean()) ::
           boolean()
   @doc """
