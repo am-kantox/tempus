@@ -1,8 +1,9 @@
 defmodule Tempus.Slots do
   @moduledoc """
-  The ordered collection of slots, backed up by `AVLTree`.
+  The protocol to deal with the implementation of `Tempus.Slot` ordered collection.
 
-  This module implements `Enumerable` and `Collectable` interfaces.
+  Comes with four default implementations, backed up by ordered list of slots,
+    by `Stream`, by `AVLTree`, and by Year-Month tree.
 
   ### Examples
 
@@ -16,32 +17,52 @@ defmodule Tempus.Slots do
       iex> Enum.map(slots, & &1.from)
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
+
   alias Tempus.{Slot, Slots}
 
-  use Tempus.Telemetria, action: :import
+  import Tempus.Guards
 
-  @empty AVLTree.new(&Slots.less/2)
+  @type container :: Enumerable.t(Slot.t())
+  @type t(container) :: %Slots{slots: container}
+  @type t() :: t(container())
 
-  defstruct slots: []
+  @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
+  defprotocol Group do
+    @moduledoc """
+    The protocol to implement for the ordered collection of slots.
+    """
 
-  @typedoc "AVL Tree specialized for `Tempus` slots type"
-  @type avl_tree :: %AVLTree{
-          root: nil | Slot.t(),
-          size: non_neg_integer(),
-          less: (Slot.t(), Slot.t() -> boolean())
-        }
+    alias Tempus.{Slot, Slots}
 
-  @type t :: %Slots{slots: [Slot.t()]}
+    @spec flatten(Slots.container()) :: {:ok, [Slot.t()]} | {:error, module()}
+    def flatten(slots)
+    @spec next(Slots.container(), Slot.origin()) :: {:ok, Slot.t()} | {:error, module()}
+    def next(slots, origin)
+    @spec previous(Slots.container(), Slot.origin()) :: {:ok, Slot.t()} | {:error, module()}
+    def previous(slots, origin)
 
-  @spec size(t()) :: integer()
+    @spec merge(Slots.container(), Slots.container(), keyword()) ::
+            {:ok, Slots.container()} | {:error, module()}
+    def merge(slots, other, options)
+    @spec inverse(Slots.container()) :: {:ok, Slots.container()} | {:error, module()}
+    def inverse(slots)
+  end
+
+  defstruct slots: struct!(@implementation, [])
+
+  def new(implementation \\ @implementation),
+    do: %Tempus.Slots{slots: struct!(implementation, [])}
+
+  @spec size(t()) :: non_neg_integer()
+  @doc deprecated: "Use `count/1` instead"
   @doc "Returns the number of slots"
-  def size(%Slots{slots: slots}), do: length(slots)
+  def size(%Slots{} = slots), do: count(slots)
 
-  @spec avl_tree(t()) :: avl_tree()
-  @doc "Returns the AVL Tree instance of slots"
-  def avl_tree(%Slots{slots: slots}), do: Enum.into(slots, @empty)
+  @spec count(t()) :: non_neg_integer()
+  @doc "Returns the number of slots"
+  def count(%Slots{} = slots), do: Enum.count(slots)
 
-  @spec merge(slots :: [t()]) :: t()
+  @spec merge(slots :: [t()], keyword()) :: t()
   @doc """
   Merges many slots into the first element in the list given as an argument.
 
@@ -63,87 +84,16 @@ defmodule Tempus.Slots do
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
 
   """
-  def merge([]), do: %Slots{}
-
-  def merge([%Slots{} | _] = slots) when is_list(slots),
-    do: Enum.reduce(slots, &merge(&2, &1))
-
-  @spec merge(this :: t(), other :: Enumerable.t()) :: t()
-  @doc """
-  Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
-  When `other` is a stream, it gets terminated immediately after the last element
-  in `this`.
-
-  ### Examples
-
-      iex> slots = [
-      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
-      ...> ] |> Enum.into(%Tempus.Slots{})
-      iex> other = [
-      ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
-      ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
-      ...> ]
-      iex> Tempus.Slots.merge(slots, other)
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
-      iex> Tempus.Slots.merge(slots, Stream.map(other, & &1))
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
-
-  """
   @telemetria level: :info
-  def merge(this, other)
+  def merge(slots, options \\ [])
+  def merge([], _options), do: %Slots.Void{}
+  def merge([%Slots{} = slots], _options), do: slots
 
-  def merge(%Slots{} = this, %Stream{} = other),
-    do: do_merge_stream(this, other)
-
-  def merge(%Slots{} = this, other) when is_function(other),
-    do: do_merge_stream(this, other)
-
-  def merge(%Slots{} = this, %Slot{} = slot),
-    do: add(this, slot)
-
-  def merge(%Slots{} = this, other) do
-    if is_nil(Enumerable.impl_for(other)) do
-      raise Tempus.ArgumentError, expected: Enum, passed: other
+  def merge([%Slots{slots: %_{} = head}, %Slots{slots: next} | rest], options) do
+    case Group.merge(head, next, options) do
+      {:ok, merged} -> merge([%Slots{slots: merged} | rest], options)
+      {:error, _} -> raise "Not yet implemented"
     end
-
-    Enum.reduce(other, this, &add(&2, &1))
-  end
-
-  @spec do_merge_stream(this :: t(), other :: Enumerable.t()) :: t()
-  defp do_merge_stream(%Slots{slots: []}, other),
-    do: %Slots{slots: Enum.take(other, 1)}
-
-  defp do_merge_stream(%Slots{slots: slots}, other) do
-    chunk_fun = fn slot, acc ->
-      slot = Slot.wrap(slot)
-      {head, tail} = Enum.split_while(acc, &(less(&1, slot) and not Slot.neighbour?(&1, slot)))
-
-      {joint, tail} =
-        Enum.split_while(
-          tail,
-          &(Slot.strict_compare(&1, slot) != :gt or Slot.neighbour?(&1, slot))
-        )
-
-      %Slots{slots: joint} = add(wrap_unsafe(joint), slot, true)
-
-      case tail do
-        [] -> {:halt, head ++ joint}
-        _ -> {:cont, head ++ joint, tail}
-      end
-    end
-
-    after_fun = fn
-      [] -> {:cont, []}
-      acc -> {:cont, acc, []}
-    end
-
-    slots =
-      other
-      |> Stream.chunk_while(slots, chunk_fun, after_fun)
-      |> Enum.flat_map(& &1)
-
-    %Slots{slots: slots}
   end
 
   @spec add(slots :: t(), slot :: Slot.origin(), join_neighbours :: boolean()) :: t()
@@ -164,58 +114,12 @@ defmodule Tempus.Slots do
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
   """
+  # TODO maybe try to intelligently join neighbours
   @telemetria level: :debug
-  def add(slots, slot, join_neighbours \\ false)
-
-  def add(%Slots{slots: []}, slot, _),
-    do: %Slots{slots: [Slot.wrap(slot)]}
-
-  def add(%Slots{slots: slots}, slot, false) do
-    slot = Slot.wrap(slot)
-
-    case Enum.split_while(slots, &(Slot.strict_compare(&1, slot) == :lt)) do
-      {^slots, []} ->
-        %Slots{slots: slots ++ [slot]}
-
-      {head, slots} ->
-        tail =
-          case Enum.split_while(slots, &(Slot.strict_compare(&1, slot) != :gt)) do
-            {[], ^slots} ->
-              [slot | slots]
-
-            {joint, tail} ->
-              [Enum.reduce(joint, slot, &Slot.join/2) | tail]
-          end
-
-        %Slots{slots: head ++ tail}
-    end
-  end
-
-  def add(%Slots{slots: slots}, slot, true) do
-    slot = Slot.wrap(slot)
-
-    case Enum.split_while(
-           slots,
-           &(Slot.strict_compare(&1, slot) == :lt and not Slot.neighbour?(&1, slot))
-         ) do
-      {^slots, []} ->
-        %Slots{slots: slots ++ [slot]}
-
-      {head, slots} ->
-        tail =
-          case Enum.split_while(
-                 slots,
-                 &(Slot.strict_compare(&1, slot) != :gt or Slot.neighbour?(&1, slot))
-               ) do
-            {[], ^slots} ->
-              [slot | slots]
-
-            {joint, tail} ->
-              [Enum.reduce(joint, slot, &Slot.join/2) | tail]
-          end
-
-        %Slots{slots: head ++ tail}
-    end
+  def add(%Slots{} = slots, slot, join_neighbours \\ false) do
+    merge([slots, %Tempus.Slots{slots: Tempus.Slots.List.wrap(slot)}],
+      join_neighbours: join_neighbours
+    )
   end
 
   @spec inverse(slots :: Slots.t(), tails :: :keep | :discard) :: Slots.t()
@@ -252,33 +156,14 @@ defmodule Tempus.Slots do
   @telemetria level: :info
   def inverse(slots, tails \\ :keep)
 
-  def inverse(%Slots{slots: []} = slots, _), do: slots
-
-  def inverse(%Slots{slots: slots}, tails) do
-    tail =
-      slots
-      |> Enum.chunk_every(2, 1)
-      |> Enum.reduce([], fn
-        [%Slot{to: from}, %Slot{from: to}], acc ->
-          slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
-          if Slot.valid?(slot), do: [slot | acc], else: acc
-
-        [%Slot{to: from}], acc ->
-          if tails == :keep and not is_nil(from),
-            do: [Slot.shift(%Slot{from: from}, from: 1) | acc],
-            else: acc
-      end)
-      |> Enum.sort({:asc, Slot})
-
-    slots =
-      if tails == :keep and not is_nil(hd(slots).from),
-        do: [Slot.shift(%Slot{to: hd(slots).from}, to: -1) | tail],
-        else: tail
-
-    %Slots{slots: slots}
+  def inverse(slots, _options) do
+    case Group.inverse(slots) do
+      {:ok, inversed} -> inversed
+      {:error, _} -> raise "Not yet implemented"
+    end
   end
 
-  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.t()
+  @spec wrap(Slot.t() | [Slot.t()], impl :: module()) :: Slots.t()
   @doc since: "0.3.0"
   @doc """
   Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
@@ -289,18 +174,12 @@ defmodule Tempus.Slots do
       iex> Tempus.Slots.wrap(~D|2020-08-06|)
       #Slots<[#Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>]>
   """
-  def wrap(nil), do: %Slots{}
-  def wrap(slots) when is_list(slots), do: %Slots{slots: Enum.map(slots, &Slot.wrap/1)}
-  def wrap(slot), do: Slots.add(%Slots{}, Slot.wrap(slot))
-
-  @spec wrap_unsafe([Slot.t()]) :: Slots.t()
-  @doc false
-  def wrap_unsafe(slots) when is_list(slots), do: %Slots{slots: slots}
+  def wrap(any, impl \\ @implementation), do: %Slots{slots: impl.wrap(any)}
 
   @spec less(s1 :: Slot.t(), s2 :: Slot.t()) :: boolean()
   @doc false
-  def less(%Slot{} = s1, %Slot{} = s2),
-    do: Slot.strict_compare(s1, s2) == :lt
+  def less(%Slot{} = s1, %Slot{} = s2) when is_coming_before(s1, s2), do: true
+  def less(_, _), do: false
 
   defimpl Enumerable do
     @moduledoc false
@@ -314,12 +193,9 @@ defmodule Tempus.Slots do
     def reduce(%Slots{slots: [head | tail]}, {:cont, acc}, fun),
       do: reduce(%Slots{slots: tail}, fun.(head, acc), fun)
 
-    def member?(%Slots{slots: slots}, value),
-      do: Enumerable.member?(slots, value)
-
-    def count(%Slots{slots: %AVLTree{size: size}}), do: {:ok, size}
-    def count(%Slots{slots: slots}), do: {:ok, length(slots)}
-    def slice(%Slots{slots: slots}), do: {:ok, length(slots), & &1.slots}
+    def member?(%Slots{slots: slots}, value), do: Enumerable.member?(slots, value)
+    def count(%Slots{slots: slots}), do: Enumerable.count(slots)
+    def slice(%Slots{slots: slots}), do: Enumerable.slice(slots)
   end
 
   defimpl Collectable do

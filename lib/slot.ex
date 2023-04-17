@@ -78,6 +78,15 @@ defmodule Tempus.Slot do
     end
   end
 
+  @doc """
+  Helper macro to pattern-match void slots.
+  """
+  defmacro void do
+    quote do
+      %Slot{from: nil, to: nil}
+    end
+  end
+
   @spec valid?(slot :: Slot.t()) :: boolean()
   @doc """
   Checks whether the `Slot` is valid (to > from) or not.
@@ -177,10 +186,9 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.disjoint?(slot, outer)
       true
   """
-  def disjoint?(s1, s2) do
-    [%Slot{} = s1, %Slot{} = s2] = Enum.map([s1, s2], &wrap/1)
-    compare(s1, s2) in [:lt, :gt]
-  end
+  def disjoint?(%Slot{} = s1, %Slot{} = s2) when is_joint(s1, s2), do: false
+  def disjoint?(%Slot{}, %Slot{}), do: true
+  def disjoint?(s1, s2), do: [s1, s2] |> Enum.map(&wrap/1) |> Enum.reduce(&disjoint?/2)
 
   @doc """
   Returns `true` if two slots are neighbours, `false` otherwise.
@@ -466,8 +474,11 @@ defmodule Tempus.Slot do
     from = do_shift(from, Keyword.get(action, :from, 0), unit)
     to = do_shift(to, Keyword.get(action, :to, 0), unit)
 
-    %Slot{from: from, to: to}
+    check_shifted(from, to)
   end
+
+  defp check_shifted(from, to) when not is_coming_before(to, from), do: %Slot{from: from, to: to}
+  defp check_shifted(_, _), do: void()
 
   @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
         when maybe_datetime: nil | DateTime.t()
@@ -517,20 +528,25 @@ defmodule Tempus.Slot do
     import Inspect.Algebra
     @fancy_inspect Application.compile_env(:tempus, :inspect, :sigil)
 
+    defp value(from, to, _opts) do
+      Enum.map_join([from, to], " → ", fn
+        nil -> "∞"
+        dt -> DateTime.to_iso8601(dt)
+      end)
+    end
+
     def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
       opts.custom_options
       |> Keyword.get(:fancy, @fancy_inspect)
       |> case do
         truthy when truthy in [:emoji, true] ->
-          value = Enum.map_join([from, to], " → ", &DateTime.to_iso8601/1)
-
           tag =
             case truthy do
               :emoji -> "⌚"
-              true -> "#Slot"
+              true -> "𝕥"
             end
 
-          concat([tag, "<", value, ">"])
+          concat([tag, "(", value(from, to, opts), ")"])
 
         false ->
           concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
@@ -546,7 +562,7 @@ defmodule Tempus.Slot do
     end
 
     def inspect(%Tempus.Slot{from: from, to: to}, opts) do
-      concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+      concat(["~I(", value(from, to, opts), ")"])
     end
   end
 end
