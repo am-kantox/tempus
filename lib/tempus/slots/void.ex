@@ -1,5 +1,8 @@
 defmodule Tempus.Slots.Void do
   @moduledoc false
+
+  use Tempus.Telemetria
+
   alias Tempus.{Slots, Slots.Void}
 
   defstruct slots: nil

@@ -4,16 +4,21 @@ defmodule Tempus.Slots.Stream do
 
   ### Examples
 
+      iex> import Tempus.Slots.Stream, only: [slots: 0]
       iex> slots = [
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
       ...>   %Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|}]
-      ...> Enum.into(slots, Tempus.Slots.new(__MODULE__))
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
+      ...> slots |> Enum.into(slots()) |> Enum.to_list()
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]
       iex> Enum.map(slots, & &1.from)
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
+
+  use Tempus.Telemetria
+
   alias Tempus.{Slot, Slots}
 
   import Tempus.Guards
@@ -22,35 +27,41 @@ defmodule Tempus.Slots.Stream do
   defstruct slots: nil
 
   @type t :: %{
-          __struct__: __MODULE__,
+          __struct__: Tempus.Slots.Stream,
           slots: Enumerable.t(Slot.t())
         }
 
-  def new, do: %__MODULE__{slots: Stream.map([], & &1)}
+  @doc false
+  defmacro slots do
+    quote do: %Tempus.Slots.Stream{slots: Stream.map([], & &1)}
+  end
 
   @doc """
-  Adds another slot to the slots collection.
+  Adds another slot to the slots collection backed by stream.
 
   Joins slots intersecting with the new one, if any.
 
   ### Example
 
-      iex> Tempus.Slots.Stream.add(Tempus.Slots.Stream.new(), Tempus.Slot.wrap(~D|2020-08-07|))
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>]>
+      iex> import Tempus.Slots.Stream, only: [slots: 0]
+      iex> Tempus.Slots.Stream.add(slots(), Tempus.Slot.wrap(~D|2020-08-07|)) |> Enum.to_list()
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}]
 
       iex> %Tempus.Slots.Stream{}
       ...> |> Tempus.Slots.Stream.add(Tempus.Slot.wrap(~D|2020-08-07|))
       ...> |> Tempus.Slots.Stream.add(Tempus.Slot.wrap(~D|2020-08-10|))
       ...> |> Tempus.Slots.Stream.add(%Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>]>
+      ...> |> Enum.to_list()
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]
   """
   @spec add(t(), Slot.t(), keyword()) :: t()
   @telemetria level: :debug
   def add(slots, slot, options \\ [])
 
   def add(%Slots.Stream{slots: nil}, %Slot{} = slot, options),
-    do: add(Slots.Stream.new(), slot, options)
+    do: add(slots(), slot, options)
 
   def add(%Slots.Stream{slots: stream}, %Slot{} = slot, _options) do
     last_fun = fn
@@ -78,16 +89,19 @@ defmodule Tempus.Slots.Stream do
 
   ### Examples
 
+      iex> import Tempus.Slots.Stream, only: [slots: 0]
       iex> slots = [
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|)
-      ...> ] |> Enum.into(Tempus.Slots.Stream.new())
+      ...> ] |> Enum.into(slots())
       iex> other = [
       ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
       ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
-      ...> ] |> Enum.into(Tempus.Slots.Stream.new())
+      ...> ] |> Enum.into(slots())
       iex> slots |> Tempus.Slots.Stream.merge(other) |> Enum.to_list()
-      #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
+       %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]
 
   """
   @spec merge(t(), Slots.container(), keyword()) :: t()
@@ -104,8 +118,8 @@ defmodule Tempus.Slots.Stream do
 
       slot, list ->
         {to_emit, maybe_rest} = Enum.split_while(list, &is_coming_before(&1, slot))
-        {to_merge, rest} = Enum.split_while(maybe_rest, &(not is_coming_before(&1, slot)))
-        {to_emit ++ [{slot, to_merge}], rest}
+        {to_merge, rest} = Enum.split_while(maybe_rest, &(not is_coming_before(slot, &1)))
+        {to_emit ++ [Tempus.Slot.join([slot | to_merge])], rest}
     end
 
     stream = Stream.transform(stream, fn -> list end, reducer, fn acc -> {acc, []} end, & &1)
@@ -228,8 +242,8 @@ defmodule Tempus.Slots.Stream do
 
   ## Examples
 
-      iex> Tempus.Slots.wrap(~D|2020-08-06|)
-      #Slots<[#Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>]>
+      iex> Tempus.Slots.Stream.wrap(~D|2020-08-06|) |> Enum.to_list()
+      [%Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}]
   """
   def wrap(nil), do: Slots.Stream.new()
 
