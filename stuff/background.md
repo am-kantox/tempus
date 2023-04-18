@@ -36,3 +36,6 @@ Slots themselves form a semigroup with a binary union operation, an identity ele
 
 `nil` is considered to be less than any datetime _and_ greater than any datetime, thus `𝕥[[nil → to₁]] ∪ 𝕥[[from₂ → to₂]]` would be either `𝕥[[nil → max(to₁, to₂)]]` if `to₁ > from₂` or `𝕥[[nil → to₁], [from₂ → to₂]]` otherwise.
 
+## Mergeability
+
+Once `𝕋` is a group, each two elements of it _might be merged_. Even if they are infinite. That’s why `Stream` implementation of `𝕋` exists.

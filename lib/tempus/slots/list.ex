@@ -167,6 +167,12 @@ defmodule Tempus.Slots.List do
     end
   end
 
+  @spec split_while(Slots.List.t(), (Slot.t() -> boolean())) :: {Slots.List.t(), Slots.List.t()}
+  def split_while(%Slots.List{slots: slots}, fun) do
+    {h, t} = Enum.split_while(slots, fun)
+    {%Slots.List{slots: h}, %Slots.List{slots: t}}
+  end
+
   @spec wrap(Slot.t() | [Slot.t()]) :: Slots.t()
   @doc since: "0.3.0"
   @doc """
