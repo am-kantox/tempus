@@ -87,8 +87,8 @@ defmodule Tempus.Slots.List do
   def merge(%Slots.List{slots: slots}, %Slots.List{slots: other}, _options),
     do: %Slots.List{slots: do_merge_lists(slots, other, [])}
 
-  # def merge(%Slots.List{} = list, %Slots.Stream{} = stream, _options),
-  #   do: Enumerable.merge(stream, list)
+  def merge(%Slots.List{} = list, %Slots.Stream{} = stream, _options),
+    do: Slots.Stream.merge(stream, list)
 
   def merge(%Slots.List{} = _list, _other, _options),
     do: raise(ArgumentError, message: "Merging different impls is not yet supported")

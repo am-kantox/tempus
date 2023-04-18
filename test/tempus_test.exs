@@ -4,6 +4,7 @@ defmodule Tempus.Test do
   doctest Tempus.Slot
   doctest Tempus.Slots
   doctest Tempus.Slots.List
+  doctest Tempus.Slots.Stream
 
   alias Tempus.Slots
   # alias Kantox.Commons.CurrencyPair, as: Pair

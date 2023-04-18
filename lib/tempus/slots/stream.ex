@@ -35,7 +35,7 @@ defmodule Tempus.Slots.Stream do
 
   ### Example
 
-      iex> Tempus.Slots.Stream.add(%Tempus.Slots.Stream.new(), Tempus.Slot.wrap(~D|2020-08-07|))
+      iex> Tempus.Slots.Stream.add(Tempus.Slots.Stream.new(), Tempus.Slot.wrap(~D|2020-08-07|))
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>]>
 
       iex> %Tempus.Slots.Stream{}
@@ -86,12 +86,11 @@ defmodule Tempus.Slots.Stream do
       ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
       ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
       ...> ] |> Enum.into(Tempus.Slots.Stream.new())
-      iex> stream = Tempus.Slots.Stream.merge(slots, other)
-      ...> Enum.to_list(stream)
+      iex> slots |> Tempus.Slots.Stream.merge(other) |> Enum.to_list()
       #Slots<[#Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]]>, #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>, #Slot<[from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]]>]>
 
   """
-  @spec merge(t(), Slots.t(), keyword()) :: t()
+  @spec merge(t(), Slots.container(), keyword()) :: t()
   @telemetria level: :info
   def merge(slots, other, options \\ [])
 
@@ -221,7 +220,7 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
-  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.t()
+  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.Stream.t()
   @doc since: "0.3.0"
   @doc """
   Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
@@ -251,43 +250,8 @@ defmodule Tempus.Slots.Stream do
     def reduce(%Slots.Stream{slots: function}, acc, fun) when is_function(function, 2),
       do: function.(acc, fun)
 
-    def reduce(%Slots.Stream{slots: %Stream{} = lazy}, acc, fun) do
-      do_reduce(lazy, acc, fn x, [acc] ->
-        {reason, acc} = fun.(x, acc)
-        {reason, [acc]}
-      end)
-    end
-
-    defp do_reduce(%Stream{enum: enum, funs: funs, accs: accs, done: done}, acc, fun) do
-      composed = :lists.foldl(fn entry_fun, acc -> entry_fun.(acc) end, fun, funs)
-      reduce = &Enumerable.reduce(enum, &1, composed)
-      do_each(reduce, done && {done, fun}, :lists.reverse(accs), acc)
-    end
-
-    defp do_each(reduce, done, accs, {command, acc}) do
-      case reduce.({command, [acc | accs]}) do
-        {:suspended, [acc | accs], continuation} ->
-          {:suspended, acc, &do_each(continuation, done, accs, &1)}
-
-        {:halted, accs} ->
-          do_done({:halted, accs}, done)
-
-        {:done, accs} ->
-          do_done({:done, accs}, done)
-      end
-    end
-
-    defp do_done({reason, [acc | _]}, nil), do: {reason, acc}
-
-    defp do_done({reason, [acc | t]}, {done, fun}) do
-      [h | _] = Enum.reverse(t)
-
-      case done.([acc, h], fun) do
-        {:cont, [acc | _]} -> {reason, acc}
-        {:halt, [acc | _]} -> {:halted, acc}
-        {:suspend, [acc | _]} -> {:suspended, acc, &{:done, elem(&1, 1)}}
-      end
-    end
+    def reduce(%Slots.Stream{slots: %Stream{} = stream}, acc, fun),
+      do: Enumerable.reduce(stream, acc, fun)
 
     def count(%Slots.List{slots: slots}), do: {:ok, length(slots)}
     def member?(%Slots.List{}, %Slot{}), do: {:error, __MODULE__}
