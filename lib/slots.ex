@@ -35,10 +35,14 @@ defmodule Tempus.Slots do
 
     @spec flatten(Slots.container()) :: {:ok, [Slot.t()]} | {:error, module()}
     def flatten(slots)
-    @spec next(Slots.container(), Slot.origin()) :: {:ok, Slot.t()} | {:error, module()}
-    def next(slots, origin)
-    @spec previous(Slots.container(), Slot.origin()) :: {:ok, Slot.t()} | {:error, module()}
-    def previous(slots, origin)
+
+    @spec next(Slots.container(), Slot.origin(), non_neg_integer()) ::
+            {:ok, Slot.t()} | {:error, module()}
+    def next(slots, origin, count)
+
+    @spec previous(Slots.container(), Slot.origin(), non_neg_integer()) ::
+            {:ok, Slot.t()} | {:error, module()}
+    def previous(slots, origin, count)
 
     @spec merge(Slots.container(), Slots.container(), keyword()) ::
             {:ok, Slots.container()} | {:error, module()}
@@ -207,9 +211,9 @@ defmodule Tempus.Slots do
     def reduce(%Slots{slots: %_{} = slots}, acc, fun),
       do: Enumerable.reduce(slots, acc, fun)
 
-    def member?(%Slots{slots: slots}, value), do: Enumerable.member?(slots, value)
-    def count(%Slots{slots: slots}), do: Enumerable.count(slots)
-    def slice(%Slots{slots: slots}), do: Enumerable.slice(slots)
+    def member?(%Slots{slots: _slots}, _value), do: {:error, __MODULE__}
+    def count(%Slots{slots: _slots}), do: {:error, __MODULE__}
+    def slice(%Slots{slots: _slots}), do: {:error, __MODULE__}
   end
 
   defimpl Collectable do

@@ -235,20 +235,59 @@ defmodule Tempus.Slots.List do
 
   defimpl Slots.Group do
     @moduledoc false
+
+    defmacrop match_n_slots(0) do
+      quote generated: true,
+            do: [var!(slot_before) = var!(head), var!(slot_after) | _] = var!(list)
+    end
+
+    defmacrop match_n_slots(1) do
+      quote generated: true,
+            do: [var!(head), var!(slot_before), var!(slot_after) | _] = var!(list)
+    end
+
+    defmacrop match_n_slots(count) when count >= 2 do
+      underscores = List.duplicate({:_, [], nil}, count - 1)
+
+      quote generated: true do
+        [var!(head), unquote_splicing(underscores), var!(slot_before), var!(slot_after) | _] =
+          var!(list)
+      end
+    end
+
     def flatten(%Slots.List{slots: slots}), do: {:ok, slots}
 
-    def next(%Slots.List{slots: slots}, origin), do: {:ok, do_next(slots, Slot.wrap(origin))}
+    def next(%Slots.List{slots: slots}, origin, count \\ 0),
+      do: {:ok, do_next(slots, Slot.wrap(origin), count)}
 
-    defp do_next([], _origin), do: nil
-    defp do_next([%Slot{} = head | _], origin) when is_coming_before(origin, head), do: head
-    defp do_next([%Slot{} = _ | tail], origin), do: do_next(tail, origin)
+    defp do_next([], _origin, _count), do: nil
 
-    def previous(%Slots.List{slots: [%Slot{} | _] = slots}, origin),
-      do: {:ok, do_previous(slots, {Slot.wrap(origin), nil})}
+    defp do_next([%Slot{} = head | _] = list, origin, count) when is_coming_before(origin, head),
+      do: do_skip(list, count)
 
-    defp do_previous([], _origin), do: nil
-    defp do_previous([%Slot{} = h | _], {origin, slot}) when is_coming_before(origin, h), do: slot
-    defp do_previous([%Slot{} = head | tail], {origin, _}), do: do_previous(tail, {origin, head})
+    defp do_next([%Slot{} = _ | tail], origin, count), do: do_next(tail, origin, count)
+
+    defp do_skip([], _count), do: nil
+    defp do_skip([h | _], count) when count <= 0, do: h
+    defp do_skip([_ | t], count), do: do_skip(t, count - 1)
+
+    def previous(%Slots.List{slots: [%Slot{} | _] = slots}, origin, count \\ 0),
+      do: {:ok, do_previous(slots, Slot.wrap(origin), count)}
+
+    Enum.each(0..12, fn count ->
+      defp do_previous(match_n_slots(unquote(count)), origin, unquote(count))
+           when is_coming_before(slot_before, origin) and not is_coming_before(slot_after, origin),
+           do: head
+
+      defp do_previous(match_n_slots(unquote(count)), origin, unquote(count)),
+        do: do_previous(tl(list), origin, unquote(count))
+    end)
+
+    defp do_previous(_, _origin, count) when count > 12 do
+      raise(ArgumentError, "Lookbehinds to more than 12 slots is not supported, chain requests")
+    end
+
+    defp do_previous(_, _origin, _count), do: nil
 
     def merge(%Slots.List{} = slots, %_{} = other, options),
       do: {:ok, Slots.List.merge(slots, other, options)}
