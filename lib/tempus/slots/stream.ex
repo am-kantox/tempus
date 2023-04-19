@@ -360,32 +360,49 @@ defmodule Tempus.Slots.Stream do
     @moduledoc false
     def flatten(%Slots.Stream{slots: stream}), do: {:ok, Enum.to_list(stream)}
 
-    def next(%Slots.Stream{slots: stream}, origin) do
+    def next(%Slots.Stream{slots: stream}, origin, count \\ 0) do
       origin = Slot.wrap(origin)
 
       slot =
         stream
         |> Stream.drop_while(&(not is_coming_before(origin, &1)))
+        |> Stream.drop(count)
         |> Enum.take(1)
         |> List.first()
 
       {:ok, slot}
     end
 
-    def previous(%Slots.Stream{slots: stream}, origin) do
-      origin = Slot.wrap(origin)
+    defmacrop match_chunk(count) do
+      underscores = List.duplicate({:_, [], nil}, count + 1)
 
-      slot =
-        stream
-        |> Stream.chunk_every(2, 1)
-        |> Stream.drop_while(&match?({_, e} when is_coming_before(e, origin), &1))
-        |> Enum.take(1)
-        |> case do
-          [] -> nil
-          [{found, _}] -> found
-        end
+      quote do: [unquote_splicing(underscores), var!(slot)]
+    end
 
-      {:ok, slot}
+    def previous(slots, origin, count \\ 0), do: do_previous(slots, origin, count)
+
+    Enum.each(0..12, fn count ->
+      defp do_previous(%Slots.Stream{slots: stream}, origin, unquote(count)) do
+        origin = Slot.wrap(origin)
+
+        slot =
+          stream
+          |> Stream.chunk_every(unquote(count) + 2, 1, :discard)
+          |> Stream.drop_while(
+            &match?(match_chunk(unquote(count)) when is_coming_before(slot, origin), &1)
+          )
+          |> Enum.take(1)
+          |> case do
+            [] -> nil
+            [list] when is_list(list) -> List.first(list)
+          end
+
+        {:ok, slot}
+      end
+    end)
+
+    defp do_previous(_slots, _origin, count) when count > 12 do
+      raise(ArgumentError, "Lookbehinds to more than 12 slots is not supported, chain requests")
     end
 
     def merge(%Slots.Stream{} = slots, %Slots.Stream{} = other, options),

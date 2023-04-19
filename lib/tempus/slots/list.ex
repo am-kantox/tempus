@@ -283,7 +283,7 @@ defmodule Tempus.Slots.List do
         do: do_previous(tl(list), origin, unquote(count))
     end)
 
-    defp do_previous(_, _origin, count) when count > 12 do
+    defp do_previous(_slots, _origin, count) when count > 12 do
       raise(ArgumentError, "Lookbehinds to more than 12 slots is not supported, chain requests")
     end
 
