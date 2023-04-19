@@ -221,7 +221,7 @@ defmodule Tempus.Slot do
 
       iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
       ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
-      #Slot<[from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
   """
   def intersect(slots) do
     Enum.reduce(slots, fn
@@ -256,10 +256,10 @@ defmodule Tempus.Slot do
   ### Example
 
       iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
 
       iex> Tempus.Slot.join([~D|2020-09-30|, ~D|2020-10-02|])
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
   """
   def join([]), do: %Slot{from: nil, to: nil}
   def join([slot | slots]), do: do_join(slots, wrap(slot))
@@ -294,10 +294,10 @@ defmodule Tempus.Slot do
   ### Example
 
       iex> Tempus.Slot.join(Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|))
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
 
       iex> Tempus.Slot.join(~D|2020-09-30|, ~D|2020-10-02|)
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
   """
   def join(s1, s2), do: join([s1, s2])
 
@@ -395,7 +395,7 @@ defmodule Tempus.Slot do
   ## Examples
 
       iex> Tempus.Slot.wrap(~D|2020-08-06|)
-      #Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}
   """
   def wrap(moment \\ nil, origin \\ DateTime.utc_now())
 
@@ -511,7 +511,7 @@ defmodule Tempus.Slot do
      from: DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York"),
      to: DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
   }
-  #⇒ #Slot<[from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]]>
+  #⇒ %Tempus.Slot{from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]}
   ```
   """
   def shift_tz(

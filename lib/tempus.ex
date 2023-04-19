@@ -10,7 +10,7 @@ defmodule Tempus do
     five days or subtracting 7 hours 30 minutes from now, considering busy slots.
   """
 
-  use Tempus.Telemetria, action: :import
+  use Tempus.Telemetria
 
   alias Tempus.{Slot, Slots}
 
@@ -38,13 +38,12 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
       ...>   Tempus.Slot.wrap(~D|2020-08-12|)
       ...> ] |> Tempus.slots()
-      %Tempus.Slots{
-        slots: [
+      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
           %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]},
           %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
-          %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-12 23:59:59.999999Z]}]}
+          %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-12 23:59:59.999999Z]}]}}
   """
-  def slots(enum), do: Enum.into(enum, %Slots{})
+  defdelegate slots(enum), to: Slots, as: :wrap
 
   @doc """
   Helper to instantiate slot from any known format, by wrapping the argument.
@@ -227,10 +226,10 @@ defmodule Tempus do
   @doc """
   Drops slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
   """
-  def drop_while(slots, fun) do
+  def drop_while(%Slots{slots: %implementation{} = slots}, fun) do
     slots
     |> Enum.drop_while(fun)
-    |> Slots.wrap_unsafe()
+    |> Slots.wrap(implementation)
   end
 
   @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
@@ -238,10 +237,10 @@ defmodule Tempus do
   @doc """
   Takes slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
   """
-  def take_while(slots, fun) do
+  def take_while(%Slots{slots: %implementation{} = slots}, fun) do
     slots
     |> Enum.take_while(fun)
-    |> Slots.wrap_unsafe()
+    |> Slots.wrap(implementation)
   end
 
   @spec days_add(slots :: Slots.t(), opts :: options()) :: [Date.t()]
@@ -332,21 +331,21 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-07 12:00:00Z|}, count: 2) |> hd()
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-08 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-10 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-07|)
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-08|)
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-08|, direction: :bwd)
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd)
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-11 11:00:00Z|, to: ~U|2020-08-11 12:00:00Z|})
       nil
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|}, direction: :bwd)

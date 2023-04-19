@@ -19,6 +19,7 @@ defmodule Tempus.Slots.Stream do
 
   use Tempus.Telemetria
 
+  alias Tempus.Guards
   alias Tempus.{Slot, Slots}
 
   import Tempus.Guards
@@ -33,8 +34,28 @@ defmodule Tempus.Slots.Stream do
 
   @doc false
   defmacro slots do
-    quote do: %Tempus.Slots.Stream{slots: Stream.map([], & &1)}
+    case __CALLER__.context do
+      nil ->
+        quote generated: true, do: %Tempus.Slots.Stream{slots: Stream.map([], & &1)}
+
+      :match ->
+        quote do
+          %Tempus.Slots.Stream{slots: slots}
+          when is_struct(slots, Stream) or is_function(slots, 2)
+        end
+
+      :guard ->
+        quote do
+          %Tempus.Slots.Stream{slots: slots}
+          when is_struct(slots, Stream) or is_function(slots, 2)
+        end
+    end
   end
+
+  @behaviour Slots.Behaviour
+  @doc false
+  @impl Slots.Behaviour
+  def new, do: slots()
 
   @doc """
   Adds another slot to the slots collection backed by stream.
@@ -108,25 +129,47 @@ defmodule Tempus.Slots.Stream do
   @telemetria level: :info
   def merge(slots, other, options \\ [])
 
-  def merge(%Slots.Stream{slots: stream}, %Slots.List{slots: list}, _options) do
+  def merge(%Slots.Stream{slots: stream}, %Slots.List{slots: list}, options) do
+    join_in_delta = Keyword.get(options, :join, 1)
+
+    split = fn slot, slots, join_in_delta ->
+      head_splitter =
+        if join_in_delta do
+          &(is_coming_before(&1, slot) and not Guards.joint_in_delta?(&1, slot, join_in_delta))
+        else
+          &is_coming_before(&1, slot)
+        end
+
+      joint_splitter =
+        if join_in_delta do
+          &(not is_coming_before(slot, &1) or Guards.joint_in_delta?(slot, &1, join_in_delta))
+        else
+          &(not is_coming_before(slot, &1))
+        end
+
+      {to_emit, maybe_rest} = Enum.split_while(slots, head_splitter)
+      {to_merge, rest} = Enum.split_while(maybe_rest, joint_splitter)
+      {to_emit ++ [Tempus.Slot.join([slot | to_merge])], rest}
+    end
+
     reducer = fn
       slot, [] ->
         {[slot], []}
 
-      slot, [h | _] = list when is_coming_before(slot, h) ->
+      slot, [h | _] = list when is_coming_before(slot, h) and join_in_delta == false ->
         {[slot], list}
 
       slot, list ->
-        {to_emit, maybe_rest} = Enum.split_while(list, &is_coming_before(&1, slot))
-        {to_merge, rest} = Enum.split_while(maybe_rest, &(not is_coming_before(slot, &1)))
-        {to_emit ++ [Tempus.Slot.join([slot | to_merge])], rest}
+        split.(slot, list, join_in_delta)
     end
 
     stream = Stream.transform(stream, fn -> list end, reducer, fn acc -> {acc, []} end, & &1)
     %Slots.Stream{slots: stream}
   end
 
-  def merge(%Slots.Stream{slots: stream}, %Slots.Stream{slots: other}, _options) do
+  def merge(%Slots.Stream{slots: stream}, %Slots.Stream{slots: other}, options) do
+    join_in_delta = Keyword.get(options, :join, 1)
+
     start_fun = fn -> {0, %Slots.List{}} end
 
     last_fun = fn {idx, acc} ->
@@ -144,14 +187,20 @@ defmodule Tempus.Slots.Stream do
     after_fun = & &1
 
     reducer = fn
-      {e1, e2, idx}, {_, %Slots.List{slots: []}} when is_coming_before(e1, e2) ->
-        {[e1], {idx, %Slots.List{slots: [e2]}}}
-
-      {e1, e2, idx}, {_, %Slots.List{slots: []}} when is_coming_before(e2, e1) ->
-        {[e2], {idx, %Slots.List{slots: [e1]}}}
+      {e1, e2, idx}, {_, %Slots.List{slots: []}} when is_joint(e1, e2) ->
+        {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
 
       {e1, e2, idx}, {_, %Slots.List{slots: []}} ->
-        {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
+        cond do
+          join_in_delta && Tempus.Guards.joint_in_delta?(e1, e2, join_in_delta) ->
+            {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
+
+          is_coming_before(e1, e2) ->
+            {[e1], {idx, %Slots.List{slots: [e2]}}}
+
+          is_coming_before(e2, e1) ->
+            {[e2], {idx, %Slots.List{slots: [e1]}}}
+        end
 
       {e1, e2, idx}, {_, acc} ->
         wrapper = if is_coming_before(e1.from, e2.from), do: e1, else: e2
@@ -256,6 +305,41 @@ defmodule Tempus.Slots.Stream do
 
   def wrap(slot) when is_origin(slot), do: wrap([slot])
 
+  @doc """
+  Procduces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
+    of elements emitted.
+
+  By default, slots will be joined if they are 1μsec aside.
+  """
+  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), keyword()) :: Slots.Stream.t()
+  def iterate(start_value, next_fun, options \\ []) do
+    next_fun = &(&1 |> next_fun.() |> Slot.wrap())
+    join_in_delta = Keyword.get(options, :join, 1)
+
+    stream =
+      Stream.unfold(Slot.wrap(start_value), fn
+        %Slot{} = value ->
+          if join_in_delta,
+            do: collect_joint(value, next_fun, join_in_delta),
+            else: {value, next_fun.(value)}
+      end)
+
+    %Slots.Stream{slots: stream}
+  end
+
+  defp collect_joint(%Slot{} = value, fun, join) do
+    %Slot{} = next = fun.(value)
+
+    if not is_coming_before(value, next),
+      do: raise(ArgumentError, "Stream values must be increasing")
+
+    if Guards.joint_in_delta?(value, next, join) do
+      collect_joint(Slot.join(value, next), fun, join)
+    else
+      {value, next}
+    end
+  end
+
   defimpl Enumerable do
     @moduledoc false
 
@@ -277,6 +361,8 @@ defmodule Tempus.Slots.Stream do
     def flatten(%Slots.Stream{slots: stream}), do: {:ok, Enum.to_list(stream)}
 
     def next(%Slots.Stream{slots: stream}, origin) do
+      origin = Slot.wrap(origin)
+
       slot =
         stream
         |> Stream.drop_while(&(not is_coming_before(origin, &1)))
@@ -287,6 +373,8 @@ defmodule Tempus.Slots.Stream do
     end
 
     def previous(%Slots.Stream{slots: stream}, origin) do
+      origin = Slot.wrap(origin)
+
       slot =
         stream
         |> Stream.chunk_every(2, 1)

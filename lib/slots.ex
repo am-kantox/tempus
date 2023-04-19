@@ -26,7 +26,6 @@ defmodule Tempus.Slots do
   @type t(container) :: %Slots{slots: container}
   @type t() :: t(container())
 
-  @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
   defprotocol Group do
     @moduledoc """
     The protocol to implement for the ordered collection of slots.
@@ -48,6 +47,8 @@ defmodule Tempus.Slots do
     def inverse(slots)
   end
 
+  @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
+
   defstruct slots: struct!(@implementation, [])
 
   @doc """
@@ -56,7 +57,7 @@ defmodule Tempus.Slots do
   def new(implementation \\ @implementation)
   def new(:list), do: new(Slots.List)
   def new(:stream), do: new(Slots.Stream)
-  def new(implementation), do: %Slots{slots: struct!(implementation, [])}
+  def new(implementation), do: %Slots{slots: implementation.new()}
 
   @spec size(t()) :: non_neg_integer()
   @doc deprecated: "Use `count/1` instead"
@@ -67,7 +68,7 @@ defmodule Tempus.Slots do
   @doc "Returns the number of slots"
   def count(%Slots{} = slots), do: Enum.count(slots)
 
-  @spec merge(slots :: [t()], keyword()) :: t()
+  @spec merge(slots :: t() | [t()], Enumerable.t(Slot.t()) | keyword(), keyword()) :: t()
   @doc """
   Merges many slots into the first element in the list given as an argument.
 
@@ -97,19 +98,23 @@ defmodule Tempus.Slots do
        %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]
 
   """
-  def merge(slots, options \\ [])
-  def merge([], _options), do: %Slots.Void{}
-  def merge([%Slots{} = slots], _options), do: slots
+  def merge(slots, enum \\ [], options \\ [])
+  def merge(%Slots{} = slots, enum, options), do: do_merge([slots, enum], options)
+  def merge(slots, options, []), do: do_merge(slots, options)
 
-  def merge([%Slots{slots: %_{} = head}, %Slots{slots: %_{} = next} | rest], options) do
+  defp do_merge([], _options), do: %Slots.Void{}
+  defp do_merge([%Slots{} = slots], _options), do: slots
+
+  defp do_merge([%Slots{slots: %_{} = head}, %Slots{slots: %_{} = next} | rest], options) do
     case Group.merge(head, next, options) do
       {:ok, merged} -> merge([%Slots{slots: merged} | rest], options)
       {:error, _} -> raise "Not yet implemented"
     end
   end
 
-  def merge([%Slots{slots: %implementation{}} = head, next | rest], options) when is_list(next),
-    do: merge([head, %Slots{slots: implementation.wrap(next)} | rest], options)
+  defp do_merge([%Slots{slots: %implementation{}} = head, next | rest], options)
+       when is_list(next) or is_struct(next, Stream) or is_function(next, 2),
+       do: merge([head, %Slots{slots: implementation.wrap(next)} | rest], options)
 
   @spec add(slots :: t(), slot :: Slot.origin()) :: t()
   @doc """
@@ -191,8 +196,9 @@ defmodule Tempus.Slots do
   def wrap(any, implementation \\ @implementation)
   def wrap(%Slots{slots: %implementation{}} = slots, implementation), do: slots
 
-  def wrap(%Slots{slots: slots}, implementation),
-    do: slots |> Group.flatten() |> wrap(implementation)
+  def wrap(%Slots{slots: slots}, implementation) do
+    with {:ok, slots} <- Group.flatten(slots), do: wrap(slots, implementation)
+  end
 
   def wrap(slots, implementation), do: %Slots{slots: implementation.wrap(slots)}
 
@@ -238,7 +244,10 @@ defmodule Tempus.Slots do
         end
         |> case do
           i when is_integer(i) and i >= 0 ->
-            [hd(slots), "… ‹#{length(slots) - 2 - i} more› …" | Enum.slice(slots, -i - 1, i + 1)]
+            Enum.slice(slots.slots, 0, 1) ++
+              [
+                "… ‹#{Enum.count(slots) - 2 - i} more› …" | Enum.slice(slots.slots, -i - 1, i + 1)
+              ]
 
           _ ->
             slots

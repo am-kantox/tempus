@@ -226,7 +226,7 @@ defmodule Tempus.Guards do
   @spec joint_in_delta?(
           Slot.t(),
           Slot.t(),
-          non_neg_integer() | {non_neg_integer(), non_neg_integer()}
+          non_neg_integer() | [{System.time_unit(), non_neg_integer()}]
         ) :: boolean()
   @doc """
   Helper to validate one slot overlaps another in delta. Unlike guards,
@@ -243,7 +243,7 @@ defmodule Tempus.Guards do
       true
       ...> joint_in_delta?(s2, s1, 1)
       true
-      ...> joint_in_delta?(s1, s2, {0, 500})
+      ...> joint_in_delta?(s1, s2, microsecond: 500)
       false
   """
   def joint_in_delta?(s1, s2, _delta) when is_joint(s1, s2), do: true
@@ -252,14 +252,9 @@ defmodule Tempus.Guards do
     joint_in_delta?(s2, s1, delta)
   end
 
-  def joint_in_delta?(s1, s2, {delta_secs, delta_msecs})
-      when is_coming_before(s1, s2) do
-    {secs_from, msecs_from} = DateTime.to_gregorian_seconds(s2.from)
-    {secs_to, msecs_to} = DateTime.to_gregorian_seconds(s1.to)
-    1_000_000 * (secs_to - secs_from - delta_secs) + msecs_to - msecs_from - delta_msecs >= 0
-  end
+  def joint_in_delta?(s1, s2, [{unit, delta}])
+      when is_coming_before(s1, s2),
+      do: abs(DateTime.diff(s1.to, s2.from, unit)) <= delta
 
-  def joint_in_delta?(s1, s2, delta) when is_coming_before(s1, s2) do
-    joint_in_delta?(s1, s2, {delta, 0})
-  end
+  def joint_in_delta?(s1, s2, delta_seconds), do: joint_in_delta?(s1, s2, second: delta_seconds)
 end

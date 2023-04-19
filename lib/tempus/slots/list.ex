@@ -36,6 +36,11 @@ defmodule Tempus.Slots.List do
     quote do: %Tempus.Slots.List{}
   end
 
+  @behaviour Slots.Behaviour
+  @doc false
+  @impl Slots.Behaviour
+  def new, do: slots()
+
   @doc """
   Adds another slot to the slots collection implemented as list.
 
@@ -232,14 +237,14 @@ defmodule Tempus.Slots.List do
     @moduledoc false
     def flatten(%Slots.List{slots: slots}), do: {:ok, slots}
 
-    def next(%Slots.List{slots: slots}, origin), do: {:ok, do_next(slots, origin)}
+    def next(%Slots.List{slots: slots}, origin), do: {:ok, do_next(slots, Slot.wrap(origin))}
 
     defp do_next([], _origin), do: nil
     defp do_next([%Slot{} = head | _], origin) when is_coming_before(origin, head), do: head
     defp do_next([%Slot{} = _ | tail], origin), do: do_next(tail, origin)
 
     def previous(%Slots.List{slots: [%Slot{} | _] = slots}, origin),
-      do: {:ok, do_previous(slots, {origin, nil})}
+      do: {:ok, do_previous(slots, {Slot.wrap(origin), nil})}
 
     defp do_previous([], _origin), do: nil
     defp do_previous([%Slot{} = h | _], {origin, slot}) when is_coming_before(origin, h), do: slot
