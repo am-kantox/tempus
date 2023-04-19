@@ -245,7 +245,7 @@ defmodule Tempus.Slots.List do
     defp do_previous([%Slot{} = h | _], {origin, slot}) when is_coming_before(origin, h), do: slot
     defp do_previous([%Slot{} = head | tail], {origin, _}), do: do_previous(tail, {origin, head})
 
-    def merge(%Slots.List{} = slots, %Slots.List{} = other, options),
+    def merge(%Slots.List{} = slots, %_{} = other, options),
       do: {:ok, Slots.List.merge(slots, other, options)}
 
     def inverse(%Slots.List{} = slots),

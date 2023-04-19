@@ -22,6 +22,7 @@ The pair of two elements is called a `Slot` if the following conditions are met
 
 For each 𝕥 in 𝕋, there exist 𝕥¯¹ such that 𝕥 ∪ 𝕥¯¹ = 𝕥¯¹ ∪ 𝕥 = 𝕥₀
 
+That said, slots form an Abelian group with union binary operation and empty set as identity element.
 ## Slots Semigroup
 
 Slots themselves form a semigroup with a binary union operation, an identity element `[nil → nil]`, without inverse.
