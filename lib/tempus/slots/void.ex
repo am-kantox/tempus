@@ -9,8 +9,7 @@ defmodule Tempus.Slots.Void do
 
   defimpl Slots.Group do
     def flatten(%Void{}), do: {:ok, []}
-    def next(%Void{}, _), do: {:error, __MODULE__}
-    def previous(%Void{}, _), do: {:error, __MODULE__}
+    def take_after(%Void{}, _, _), do: {:error, __MODULE__}
     def merge(%Void{}, other, _options), do: {:ok, other}
     def inverse(%Void{} = void), do: {:ok, void}
   end

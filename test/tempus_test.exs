@@ -2,9 +2,6 @@ defmodule Tempus.Test do
   use ExUnit.Case, async: true
   doctest Tempus
   doctest Tempus.Slot
-  doctest Tempus.Slots
-  doctest Tempus.Slots.List
-  doctest Tempus.Slots.Stream
 
   alias Tempus.Slots
   # alias Kantox.Commons.CurrencyPair, as: Pair

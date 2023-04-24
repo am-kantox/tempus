@@ -19,7 +19,6 @@ defmodule Tempus.Slots.Stream do
 
   use Tempus.Telemetria
 
-  alias Tempus.Guards
   alias Tempus.{Slot, Slots}
 
   import Tempus.Guards
@@ -81,10 +80,12 @@ defmodule Tempus.Slots.Stream do
   @telemetria level: :debug
   def add(slots, slot, options \\ [])
 
-  def add(%Slots.Stream{slots: nil}, %Slot{} = slot, options),
+  def add(%Slots.Stream{slots: nil}, slot, options),
     do: add(slots(), slot, options)
 
-  def add(%Slots.Stream{slots: stream}, %Slot{} = slot, _options) do
+  def add(%Slots.Stream{slots: stream}, slot, _options) do
+    slot = Slot.wrap(slot)
+
     last_fun = fn
       nil -> {[], []}
       slot -> {[slot], []}
@@ -135,14 +136,14 @@ defmodule Tempus.Slots.Stream do
     split = fn slot, slots, join_in_delta ->
       head_splitter =
         if join_in_delta do
-          &(is_coming_before(&1, slot) and not Guards.joint_in_delta?(&1, slot, join_in_delta))
+          &(is_coming_before(&1, slot) and not joint_in_delta?(&1, slot, join_in_delta))
         else
           &is_coming_before(&1, slot)
         end
 
       joint_splitter =
         if join_in_delta do
-          &(not is_coming_before(slot, &1) or Guards.joint_in_delta?(slot, &1, join_in_delta))
+          &(not is_coming_before(slot, &1) or joint_in_delta?(slot, &1, join_in_delta))
         else
           &(not is_coming_before(slot, &1))
         end
@@ -192,7 +193,7 @@ defmodule Tempus.Slots.Stream do
 
       {e1, e2, idx}, {_, %Slots.List{slots: []}} ->
         cond do
-          join_in_delta && Tempus.Guards.joint_in_delta?(e1, e2, join_in_delta) ->
+          join_in_delta && joint_in_delta?(e1, e2, join_in_delta) ->
             {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
 
           is_coming_before(e1, e2) ->
@@ -254,9 +255,9 @@ defmodule Tempus.Slots.Stream do
   """
   @spec inverse(Slots.Stream.t()) :: Slots.Stream.t()
   @telemetria level: :info
-  def inverse(slots)
+  def inverse(slots, options \\ [])
 
-  def inverse(%Slots.Stream{slots: stream}) do
+  def inverse(%Slots.Stream{slots: stream}, _options) do
     start_fun = fn -> nil end
 
     last_fun = fn
@@ -282,28 +283,6 @@ defmodule Tempus.Slots.Stream do
       slot -> [slot]
     end
   end
-
-  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.Stream.t()
-  @doc since: "0.3.0"
-  @doc """
-  Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
-  For everything else it’d call `Slot.wrap/1` on an argument and add it to empty slots.
-
-  ## Examples
-
-      iex> Tempus.Slots.Stream.wrap(~D|2020-08-06|) |> Enum.to_list()
-      [%Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}]
-  """
-  def wrap(nil), do: Slots.Stream.new()
-
-  def wrap(slots) when is_list(slots) do
-    list =
-      Enum.reduce(slots, %Slots.List{}, fn slot, acc -> Slots.List.add(acc, Slot.wrap(slot)) end)
-
-    %Slots.Stream{slots: Stream.map(list, & &1)}
-  end
-
-  def wrap(slot) when is_origin(slot), do: wrap([slot])
 
   @doc """
   Procduces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
@@ -333,7 +312,7 @@ defmodule Tempus.Slots.Stream do
     if not is_coming_before(value, next),
       do: raise(ArgumentError, "Stream values must be increasing")
 
-    if Guards.joint_in_delta?(value, next, join) do
+    if joint_in_delta?(value, next, join) do
       collect_joint(Slot.join(value, next), fun, join)
     else
       {value, next}
@@ -358,20 +337,7 @@ defmodule Tempus.Slots.Stream do
 
   defimpl Slots.Group do
     @moduledoc false
-    def flatten(%Slots.Stream{slots: stream}), do: {:ok, Enum.to_list(stream)}
-
-    def next(%Slots.Stream{slots: stream}, origin, count \\ 0) do
-      origin = Slot.wrap(origin)
-
-      slot =
-        stream
-        |> Stream.drop_while(&(not is_coming_before(origin, &1)))
-        |> Stream.drop(count)
-        |> Enum.take(1)
-        |> List.first()
-
-      {:ok, slot}
-    end
+    @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
 
     defmacrop match_chunk(count) do
       underscores = List.duplicate({:_, [], nil}, count + 1)
@@ -379,37 +345,61 @@ defmodule Tempus.Slots.Stream do
       quote do: [unquote_splicing(underscores), var!(slot)]
     end
 
-    def previous(slots, origin, count \\ 0), do: do_previous(slots, origin, count)
+    def identity(%Slots.Stream{}), do: Slots.Stream.new()
 
-    Enum.each(0..12, fn count ->
+    def flatten(%Slots.Stream{slots: stream}, _options \\ []), do: Enum.to_list(stream)
+
+    def add(%Slots.Stream{} = stream, slot, options), do: Slots.Stream.add(stream, slot, options)
+
+    def drop_until(slots, origin, options) do
+      adjustment = Keyword.get(options, :adjustment, 0)
+      do_drop_until(slots, origin, adjustment)
+    end
+
+    def do_drop_until(%Slots.Stream{slots: stream}, origin, adjustment) when adjustment >= 0 do
+      origin = Slot.wrap(origin)
+
+      tail =
+        stream
+        |> Stream.drop_while(&is_coming_before(&1, origin))
+        |> Stream.drop(adjustment)
+
+      {:ok, tail}
+    end
+
+    def do_drop_until(slots, origin, adjustment), do: do_previous(slots, origin, adjustment + 1)
+
+    Enum.each(0..@lookbehinds, fn count ->
       defp do_previous(%Slots.Stream{slots: stream}, origin, unquote(count)) do
         origin = Slot.wrap(origin)
 
-        slot =
+        tail =
           stream
           |> Stream.chunk_every(unquote(count) + 2, 1, :discard)
           |> Stream.drop_while(
-            &match?(match_chunk(unquote(count)) when is_coming_before(slot, origin), &1)
+            &match?(match_chunk(unquote(count)) when not is_coming_before(origin, slot), &1)
           )
-          |> Enum.take(1)
-          |> case do
-            [] -> nil
-            [list] when is_list(list) -> List.first(list)
-          end
+          |> Stream.flat_map(fn
+            [result | _] -> [result]
+            _ -> []
+          end)
 
-        {:ok, slot}
+        {:ok, tail}
       end
     end)
 
-    defp do_previous(_slots, _origin, count) when count > 12 do
-      raise(ArgumentError, "Lookbehinds to more than 12 slots is not supported, chain requests")
+    defp do_previous(_slots, _origin, count) when count > @lookbehinds do
+      raise(
+        ArgumentError,
+        "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
+      )
     end
 
     def merge(%Slots.Stream{} = slots, %Slots.Stream{} = other, options),
       do: {:ok, Slots.Stream.merge(slots, other, options)}
 
-    def inverse(%Slots.Stream{} = slots),
-      do: {:ok, Slots.Stream.inverse(slots)}
+    def inverse(%Slots.Stream{} = slots, options \\ []),
+      do: {:ok, Slots.Stream.inverse(slots, options)}
   end
 
   defimpl Collectable do

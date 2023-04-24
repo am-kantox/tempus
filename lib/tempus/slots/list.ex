@@ -63,8 +63,8 @@ defmodule Tempus.Slots.List do
   """
   @spec add(Slots.List.t(), Slot.t(), keyword()) :: Slots.List.t()
   @telemetria level: :debug
-  def add(%Slots.List{slots: slots}, %Slot{} = slot, _options \\ []),
-    do: %Slots.List{slots: do_add(slot, [], slots)}
+  def add(%Slots.List{slots: slots}, slot, _options \\ []),
+    do: %Slots.List{slots: do_add(Slot.wrap(slot), [], slots)}
 
   defp do_add(slot, head, []), do: Enum.reverse([slot | head])
 
@@ -92,12 +92,12 @@ defmodule Tempus.Slots.List do
       ...>   %Tempus.Slot{from: ~U|2020-08-07 23:00:00Z|, to: ~U|2020-08-08 12:00:00Z|},
       ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
       ...> ]
-      iex> Tempus.Slots.List.merge(slots, Tempus.Slots.List.wrap(other))
+      iex> Tempus.Slots.merge([%Tempus.Slots{slots: slots}, other]).slots
       %Tempus.Slots.List{slots: [
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
         %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]}
-      iex> slots |> Tempus.Slots.List.merge(Tempus.Slots.Stream.wrap(other)) |> Enum.to_list()
+      iex> %Tempus.Slots{slots: slots} |> Tempus.Slots.merge(Tempus.Slots.wrap(other, Tempus.Slots.Stream)) |> Enum.to_list()
       [
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
@@ -110,8 +110,8 @@ defmodule Tempus.Slots.List do
   def merge(%Slots.List{slots: slots}, %Slots.List{slots: other}, _options),
     do: %Slots.List{slots: do_merge_lists(slots, other, [])}
 
-  def merge(%Slots.List{} = list, %Slots.Stream{} = stream, _options),
-    do: Slots.Stream.merge(stream, list)
+  def merge(%Slots.List{} = list, %Slots.Stream{} = stream, options),
+    do: Slots.Stream.merge(stream, list, options)
 
   def merge(%Slots.List{} = _list, _other, _options),
     do: raise(ArgumentError, message: "Merging different impls is not yet supported")
@@ -164,14 +164,14 @@ defmodule Tempus.Slots.List do
         %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]}
       ]}
   """
-  @spec inverse(Slots.List.t()) :: Slots.List.t()
+  @spec inverse(Slots.List.t(), keyword()) :: Slots.List.t()
   @telemetria level: :info
-  def inverse(slots)
+  def inverse(slots, options \\ [])
 
-  def inverse(%Slots.List{slots: [void()]}), do: %Slots.List{slots: []}
-  def inverse(%Slots.List{slots: []}), do: %Slots.List{slots: [void()]}
+  def inverse(%Slots.List{slots: [void()]}, _options), do: %Slots.List{slots: []}
+  def inverse(%Slots.List{slots: []}, _options), do: %Slots.List{slots: [void()]}
 
-  def inverse(%Slots.List{slots: list}),
+  def inverse(%Slots.List{slots: list}, _options),
     do: %Slots.List{slots: do_inverse(list, {[], nil})}
 
   defp do_inverse([], {slots, nil}), do: Enum.reverse(slots)
@@ -196,26 +196,6 @@ defmodule Tempus.Slots.List do
     {%Slots.List{slots: h}, %Slots.List{slots: t}}
   end
 
-  @spec wrap(Slot.t() | [Slot.t()]) :: Slots.t()
-  @doc since: "0.3.0"
-  @doc """
-  Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
-  For everything else it’d call `Slot.wrap/1` on an argument and add it to empty slots.
-
-  ## Examples
-
-      iex> Tempus.Slots.List.wrap(~D|2020-08-06|)
-      %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}]}
-  """
-  def wrap(nil), do: %Slots.List{}
-
-  def wrap(slots) when is_list(slots) do
-    Enum.reduce(slots, %Slots.List{}, fn slot, acc -> Slots.List.add(acc, Slot.wrap(slot)) end)
-  end
-
-  def wrap(slot) when is_origin(slot), do: wrap([slot])
-
   defimpl Enumerable do
     @moduledoc false
     def reduce(_slots, {:halt, acc}, _fun), do: {:halted, acc}
@@ -236,6 +216,8 @@ defmodule Tempus.Slots.List do
   defimpl Slots.Group do
     @moduledoc false
 
+    @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
+
     defmacrop match_n_slots(0) do
       quote generated: true,
             do: [var!(slot_before) = var!(head), var!(slot_after) | _] = var!(list)
@@ -255,36 +237,48 @@ defmodule Tempus.Slots.List do
       end
     end
 
-    def flatten(%Slots.List{slots: slots}), do: {:ok, slots}
+    def identity(%Slots.List{slots: _}), do: %Slots.List{slots: []}
+    def flatten(%Slots.List{slots: slots}, _options \\ []), do: slots
+    def add(%Slots.List{} = slots, slot, options \\ []), do: Slots.List.add(slots, slot, options)
 
-    def next(%Slots.List{slots: slots}, origin, count \\ 0),
-      do: {:ok, do_next(slots, Slot.wrap(origin), count)}
+    def drop_until(slots, origin, options \\ []) do
+      adjustment = Keyword.get(options, :adjustment, 0)
+      do_drop_until(slots, origin, adjustment)
+    end
 
-    defp do_next([], _origin, _count), do: nil
+    defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment) when adjustment >= 0,
+      do: {:ok, do_next(slots, Slot.wrap(origin), adjustment)}
 
-    defp do_next([%Slot{} = head | _] = list, origin, count) when is_coming_before(origin, head),
-      do: do_skip(list, count)
+    defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment),
+      do: {:ok, do_previous(slots, Slot.wrap(origin), adjustment + 1)}
+
+    defp do_next([], _origin, _count), do: []
+
+    defp do_next([%Slot{} = head | _] = list, origin, count)
+         when not is_coming_before(head, origin),
+         do: do_skip(list, count)
 
     defp do_next([%Slot{} = _ | tail], origin, count), do: do_next(tail, origin, count)
 
-    defp do_skip([], _count), do: nil
-    defp do_skip([h | _], count) when count <= 0, do: h
+    defp do_skip([], _count), do: []
+    defp do_skip([_ | _] = result, count) when count <= 0, do: result
     defp do_skip([_ | t], count), do: do_skip(t, count - 1)
 
-    def previous(%Slots.List{slots: [%Slot{} | _] = slots}, origin, count \\ 0),
-      do: {:ok, do_previous(slots, Slot.wrap(origin), count)}
-
-    Enum.each(0..12, fn count ->
+    Enum.each(0..@lookbehinds, fn count ->
       defp do_previous(match_n_slots(unquote(count)), origin, unquote(count))
-           when is_coming_before(slot_before, origin) and not is_coming_before(slot_after, origin),
-           do: head
+           when not is_coming_before(origin, slot_before) and
+                  is_coming_before(origin, slot_after),
+           do: list
 
       defp do_previous(match_n_slots(unquote(count)), origin, unquote(count)),
         do: do_previous(tl(list), origin, unquote(count))
     end)
 
-    defp do_previous(_slots, _origin, count) when count > 12 do
-      raise(ArgumentError, "Lookbehinds to more than 12 slots is not supported, chain requests")
+    defp do_previous(_slots, _origin, count) when count > @lookbehinds do
+      raise(
+        ArgumentError,
+        "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
+      )
     end
 
     defp do_previous(_, _origin, _count), do: nil
@@ -292,8 +286,8 @@ defmodule Tempus.Slots.List do
     def merge(%Slots.List{} = slots, %_{} = other, options),
       do: {:ok, Slots.List.merge(slots, other, options)}
 
-    def inverse(%Slots.List{} = slots),
-      do: {:ok, Slots.List.inverse(slots)}
+    def inverse(%Slots.List{} = slots, options),
+      do: {:ok, Slots.List.inverse(slots, options)}
   end
 
   defimpl Collectable do

@@ -20,36 +20,11 @@ defmodule Tempus.Slots do
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
 
-  alias Tempus.{Slot, Slots}
+  alias Tempus.{Slot, Slots, Slots.Group}
 
   @type container :: Enumerable.t(Slot.t())
   @type t(container) :: %Slots{slots: container}
   @type t() :: t(container())
-
-  defprotocol Group do
-    @moduledoc """
-    The protocol to implement for the ordered collection of slots.
-    """
-
-    alias Tempus.{Slot, Slots}
-
-    @spec flatten(Slots.container()) :: {:ok, [Slot.t()]} | {:error, module()}
-    def flatten(slots)
-
-    @spec next(Slots.container(), Slot.origin(), non_neg_integer()) ::
-            {:ok, Slot.t()} | {:error, module()}
-    def next(slots, origin, count)
-
-    @spec previous(Slots.container(), Slot.origin(), non_neg_integer()) ::
-            {:ok, Slot.t()} | {:error, module()}
-    def previous(slots, origin, count)
-
-    @spec merge(Slots.container(), Slots.container(), keyword()) ::
-            {:ok, Slots.container()} | {:error, module()}
-    def merge(slots, other, options)
-    @spec inverse(Slots.container()) :: {:ok, Slots.container()} | {:error, module()}
-    def inverse(slots)
-  end
 
   @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
 
@@ -58,10 +33,10 @@ defmodule Tempus.Slots do
   @doc """
   Creates an instance of slots, using a backend given as a parameter.
   """
-  def new(implementation \\ @implementation)
-  def new(:list), do: new(Slots.List)
-  def new(:stream), do: new(Slots.Stream)
-  def new(implementation), do: %Slots{slots: implementation.new()}
+  def new(implementation \\ @implementation, data)
+  def new(:list, data), do: new(Slots.List, data)
+  def new(:stream, data), do: new(Slots.Stream, data)
+  def new(implementation, data), do: %Slots{slots: Enum.into(data, implementation.new())}
 
   @spec size(t()) :: non_neg_integer()
   @doc deprecated: "Use `count/1` instead"
@@ -71,6 +46,9 @@ defmodule Tempus.Slots do
   @spec count(t()) :: non_neg_integer()
   @doc "Returns the number of slots"
   def count(%Slots{} = slots), do: Enum.count(slots)
+
+  @spec identity(t()) :: container()
+  def identity(%Slots{slots: slots}), do: Group.identity(slots)
 
   @spec merge(slots :: t() | [t()], Enumerable.t(Slot.t()) | keyword(), keyword()) :: t()
   @doc """
@@ -109,16 +87,17 @@ defmodule Tempus.Slots do
   defp do_merge([], _options), do: %Slots.Void{}
   defp do_merge([%Slots{} = slots], _options), do: slots
 
-  defp do_merge([%Slots{slots: %_{} = head}, %Slots{slots: %_{} = next} | rest], options) do
+  defp do_merge([%Slots{slots: %_{} = head} = slots, %Slots{slots: %_{} = next} | rest], options) do
     case Group.merge(head, next, options) do
       {:ok, merged} -> merge([%Slots{slots: merged} | rest], options)
-      {:error, _} -> raise "Not yet implemented"
+      {:error, _} -> do_merge([slots, Group.flatten(next, options) | rest], options)
     end
   end
 
-  defp do_merge([%Slots{slots: %implementation{}} = head, next | rest], options)
-       when is_list(next) or is_struct(next, Stream) or is_function(next, 2),
-       do: merge([head, %Slots{slots: implementation.wrap(next)} | rest], options)
+  defp do_merge([%Slots{slots: %_{} = head}, next | rest], options) when is_list(next) do
+    next = Enum.reduce(next, head, &Group.add(&2, &1, options))
+    merge([%Slots{slots: next} | rest], options)
+  end
 
   @spec add(slots :: t(), slot :: Slot.origin()) :: t()
   @doc """
@@ -143,10 +122,10 @@ defmodule Tempus.Slots do
   """
   # TODO maybe try to intelligently join neighbours
   def add(%Slots{} = slots, slot) do
-    merge([slots, %Tempus.Slots{slots: Tempus.Slots.List.wrap(slot)}])
+    merge([slots, %Tempus.Slots{slots: %Tempus.Slots.List{slots: [Slot.wrap(slot)]}}])
   end
 
-  @spec inverse(slots :: Slots.t()) :: Slots.t()
+  @spec inverse(slots :: Slots.t(), keyword()) :: Slots.t()
   @doc """
   Inverses `Slots` returning the new `Slots` instance with slots set where
     there were blanks.
@@ -178,14 +157,18 @@ defmodule Tempus.Slots do
   """
   def inverse(slots, options \\ [])
 
-  def inverse(%Slots{slots: slots}, _options) do
-    case Group.inverse(slots) do
+  def inverse(%Slots{slots: slots}, options) do
+    case Group.inverse(slots, options) do
       {:ok, inversed} -> %Slots{slots: inversed}
       {:error, _} -> raise "Not yet implemented"
     end
   end
 
-  @spec wrap([Slot.origin()] | Slots.t(), module()) :: Slots.t()
+  def flatten(slots, options \\ [])
+
+  def flatten(%Slots{slots: slots}, options), do: Group.flatten(slots, options)
+
+  @spec wrap([Slot.origin()] | Slots.t(), keyword()) :: Slots.t()
   @doc since: "0.3.0"
   @doc """
   Wraps the argument into a slots instance. For `nil` it’d be an empty slots.
@@ -197,14 +180,25 @@ defmodule Tempus.Slots do
       %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
         %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}]}}
   """
-  def wrap(any, implementation \\ @implementation)
-  def wrap(%Slots{slots: %implementation{}} = slots, implementation), do: slots
+  def wrap(any, options \\ [])
 
-  def wrap(%Slots{slots: slots}, implementation) do
-    with {:ok, slots} <- Group.flatten(slots), do: wrap(slots, implementation)
+  def wrap(any, implementation) when is_atom(implementation),
+    do: do_wrap(any, implementation, [])
+
+  def wrap(any, options) when is_list(options) do
+    {implementation, options} = Keyword.pop(options, :implementation, @implementation)
+    do_wrap(any, implementation, options)
   end
 
-  def wrap(slots, implementation), do: %Slots{slots: implementation.wrap(slots)}
+  defp do_wrap(%Slots{slots: %implementation{}} = slots, implementation, _options), do: slots
+
+  defp do_wrap(%Slots{slots: slots}, implementation, options) do
+    slots |> Group.flatten(options) |> do_wrap(implementation, options)
+  end
+
+  defp do_wrap(slots, implementation, options) do
+    merge(%Slots{slots: implementation.new()}, List.wrap(slots), options)
+  end
 
   defimpl Enumerable do
     @moduledoc false
