@@ -24,12 +24,9 @@ defmodule Tempus.Slots.List do
   import Tempus.Guards
   import Tempus.Slot, only: [void: 0]
 
-  defstruct slots: []
+  @type t :: Slots.t(Slots.List)
 
-  @type t :: %{
-          __struct__: Tempus.Slots.List,
-          slots: [Slot.t()]
-        }
+  defstruct slots: []
 
   @doc false
   defmacro slots do
@@ -61,21 +58,40 @@ defmodule Tempus.Slots.List do
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}
   """
-  @spec add(Slots.List.t(), Slot.t(), keyword()) :: Slots.List.t()
+  @spec add(t(), Slot.t(), keyword()) :: t()
   @telemetria level: :debug
-  def add(%Slots.List{slots: slots}, slot, _options \\ []),
-    do: %Slots.List{slots: do_add(Slot.wrap(slot), [], slots)}
+  def add(%Slots.List{slots: slots}, slot, options \\ []) do
+    slots =
+      options
+      |> pop_jid()
+      |> do_add(Slot.wrap(slot), [], slots)
 
-  defp do_add(slot, head, []), do: Enum.reverse([slot | head])
+    %Slots.List{slots: slots}
+  end
 
-  defp do_add(slot, head, [th | tail]) when is_coming_before(th, slot),
-    do: do_add(slot, [th | head], tail)
+  defp do_add(_, slot, head, []), do: Enum.reverse([slot | head])
 
-  defp do_add(slot, head, [th | tail]) when is_coming_before(slot, th),
+  defp do_add(nil, slot, head, [th | tail]) when is_coming_before(th, slot),
+    do: do_add(nil, slot, [th | head], tail)
+
+  defp do_add(nil, slot, head, [th | tail]) when is_coming_before(slot, th),
     do: Enum.reverse(head) ++ [slot, th | tail]
 
-  defp do_add(slot, head, [th | tail]),
-    do: Enum.reverse(head) ++ [Slot.join(slot, th) | tail]
+  defp do_add(nil, slot, head, [th | tail]),
+    do: do_add(nil, Slot.join(slot, th), head, tail)
+
+  defp do_add(jid, slot, head, [th | tail]) do
+    cond do
+      is_coming_before(slot, th) and not joint_in_delta?(slot, th, jid) ->
+        Enum.reverse(head) ++ [slot, th | tail]
+
+      is_coming_before(th, slot) and not joint_in_delta?(th, slot, jid) ->
+        do_add(jid, slot, [th | head], tail)
+
+      true ->
+        do_add(jid, Slot.join(slot, th), head, tail)
+    end
+  end
 
   @doc """
   Merges `other` into `this` slots instance. `other` might be `Enum` _or_ `Stream`.
@@ -104,11 +120,17 @@ defmodule Tempus.Slots.List do
         %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]
   """
   @spec merge(t(), t() | Tempus.Slots.Stream.t(), keyword()) :: t()
-  @telemetria level: :info
+  @telemetria level: :debug
   def merge(slots, other, options \\ [])
 
-  def merge(%Slots.List{slots: slots}, %Slots.List{slots: other}, _options),
-    do: %Slots.List{slots: do_merge_lists(slots, other, [])}
+  def merge(%Slots.List{slots: slots}, %Slots.List{slots: other}, options) do
+    slots =
+      options
+      |> pop_jid()
+      |> do_merge_lists(slots, other, [])
+
+    %Slots.List{slots: slots}
+  end
 
   def merge(%Slots.List{} = list, %Slots.Stream{} = stream, options),
     do: Slots.Stream.merge(stream, list, options)
@@ -116,23 +138,58 @@ defmodule Tempus.Slots.List do
   def merge(%Slots.List{} = _list, _other, _options),
     do: raise(ArgumentError, message: "Merging different impls is not yet supported")
 
-  defp do_merge_lists([], other, result), do: Enum.reverse(result) ++ other
-  defp do_merge_lists(slots, [], result), do: Enum.reverse(result) ++ slots
+  defp do_merge_lists(jid, [], other, result), do: do_maybe_join(jid, result, other)
+  defp do_merge_lists(jid, slots, [], result), do: do_maybe_join(jid, result, slots)
 
-  defp do_merge_lists([hs | ts], [ho | to], result) when is_coming_before(hs, ho),
-    do: do_merge_lists(ts, [ho | to], [hs | result])
+  # case: slots are joint
+  defp do_merge_lists(jid, [hs | ts], [ho | to], result)
+       when is_joint(hs, ho) and is_coming_before(hs.to, ho.to),
+       do: do_merge_lists(jid, ts, [Slot.join(hs, ho) | to], result)
 
-  defp do_merge_lists([hs | ts], [ho | to], result) when is_coming_before(ho, hs),
-    do: do_merge_lists([hs | ts], to, [ho | result])
+  defp do_merge_lists(jid, [hs | ts], [ho | to], result)
+       when is_joint(hs, ho) and is_coming_before(ho.to, hs.to),
+       do: do_merge_lists(jid, [Slot.join(hs, ho) | ts], to, result)
 
-  defp do_merge_lists([hs | ts], [ho | to], result) when is_coming_before(hs.to, ho.to),
-    do: do_merge_lists(ts, [Slot.join(hs, ho) | to], result)
+  defp do_merge_lists(jid, [hs | ts], [ho | to], result) when is_joint(hs, ho),
+    do: do_merge_lists(jid, ts, to, [Slot.join(hs, ho) | result])
 
-  defp do_merge_lists([hs | ts], [ho | to], result) when is_coming_before(ho.to, hs.to),
-    do: do_merge_lists([Slot.join(hs, ho) | ts], to, result)
+  # case: no check for joint in delta
+  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_coming_before(hs, ho),
+    do: do_merge_lists(nil, ts, [ho | to], [hs | result])
 
-  defp do_merge_lists([hs | ts], [ho | to], result),
-    do: do_merge_lists(ts, to, [Slot.join(hs, ho) | result])
+  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_coming_before(ho, hs),
+    do: do_merge_lists(nil, [hs | ts], to, [ho | result])
+
+  # case: check for joint in delta
+  defp do_merge_lists(jid, [hs | ts], [ho | to], result) do
+    cond do
+      is_coming_before(hs, ho) and not joint_in_delta?(hs, ho, jid) ->
+        do_merge_lists(jid, ts, [ho | to], [hs | result])
+
+      is_coming_before(ho, hs) and not joint_in_delta?(ho, hs, jid) ->
+        do_merge_lists(jid, [hs | ts], to, [ho | result])
+
+      is_coming_before(hs.to, ho.to) ->
+        do_merge_lists(jid, ts, [Slot.join(hs, ho) | to], result)
+
+      is_coming_before(ho.to, hs.to) ->
+        do_merge_lists(jid, [Slot.join(hs, ho) | ts], to, result)
+
+      true ->
+        # this is unreachable, but `cond/1` requires `true`
+        do_merge_lists(jid, ts, to, [Slot.join(hs, ho) | result])
+    end
+  end
+
+  defp do_maybe_join(_, [], tail), do: tail
+  defp do_maybe_join(_, head, []), do: Enum.reverse(head)
+  defp do_maybe_join(nil, head, tail), do: Enum.reverse(head) ++ tail
+
+  defp do_maybe_join(jid, [h | head], [t | tail]) do
+    if joint_in_delta?(h, t, jid),
+      do: do_maybe_join(jid, [Slot.join(h, t) | head], tail),
+      else: do_maybe_join(nil, head, tail)
+  end
 
   @doc """
   Inverses `Slots` returning the new `Slots` instance with slots set where
@@ -194,6 +251,14 @@ defmodule Tempus.Slots.List do
   def split_while(%Slots.List{slots: slots}, fun) do
     {h, t} = Enum.split_while(slots, fun)
     {%Slots.List{slots: h}, %Slots.List{slots: t}}
+  end
+
+  defp pop_jid(options) do
+    case Keyword.get(options, :join, nil) do
+      true -> 1
+      false -> nil
+      value -> value
+    end
   end
 
   defimpl Enumerable do

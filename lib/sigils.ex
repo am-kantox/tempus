@@ -30,7 +30,7 @@ defmodule Tempus.Sigils do
       %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}
 
   """
-  defmacro sigil_I({:<<>>, _, [binary]}, 'g') when is_binary(binary) do
+  defmacro sigil_I({:<<>>, _, [binary]}, ~c"g") when is_binary(binary) do
     from_iso = List.duplicate(&Tempus.guess/1, 2)
     do_ast(binary, from_iso, __CALLER__)
   end
@@ -46,8 +46,8 @@ defmodule Tempus.Sigils do
       modifiers
       |> case do
         [] -> [DateTime, DateTime]
-        [ft] when ft in 'dtu' -> List.duplicate(by_mod.(ft), 2)
-        [f, t] = mods when f in 'dtu' and t in 'dtu' -> Enum.map(mods, by_mod)
+        [ft] when ft in ~c"dtu" -> List.duplicate(by_mod.(ft), 2)
+        [f, t] = mods when f in ~c"dtu" and t in ~c"dtu" -> Enum.map(mods, by_mod)
       end
       |> Enum.map(&Function.capture(&1, :from_iso8601, 1))
 

@@ -23,8 +23,9 @@ defmodule Tempus.Slots do
   alias Tempus.{Slot, Slots, Slots.Group}
 
   @type container :: Enumerable.t(Slot.t())
-  @type t(container) :: %Slots{slots: container}
-  @type t() :: t(container())
+  @opaque container_type(implementation) :: %{__struct__: implementation, slots: container()}
+  @type t(implementation) :: %Slots{slots: container_type(implementation)}
+  @type t() :: t(Slots.List)
 
   @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
 
@@ -40,7 +41,7 @@ defmodule Tempus.Slots do
 
   @spec size(t()) :: non_neg_integer()
   @doc deprecated: "Use `count/1` instead"
-  @doc "Returns the number of slots"
+  @doc false
   def size(%Slots{} = slots), do: count(slots)
 
   @spec count(t()) :: non_neg_integer()
@@ -48,13 +49,14 @@ defmodule Tempus.Slots do
   def count(%Slots{} = slots), do: Enum.count(slots)
 
   @spec identity(t()) :: container()
-  def identity(%Slots{slots: slots}), do: Group.identity(slots)
+  @doc false
+  def identity(%Slots{slots: slots}), do: %Slots{slots: Group.identity(slots)}
 
   @spec merge(slots :: t() | [t()], Enumerable.t(Slot.t()) | keyword(), keyword()) :: t()
   @doc """
   Merges many slots into the first element in the list given as an argument.
 
-  Other arguments might be streams, the first one must be a `Tempus.Slots` instance.
+  Other arguments might be enumerables, the first one must be a `Tempus.Slots` instance.
 
   ### Examples
 
@@ -120,10 +122,8 @@ defmodule Tempus.Slots do
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}}
   """
-  # TODO maybe try to intelligently join neighbours
-  def add(%Slots{} = slots, slot) do
-    merge([slots, %Tempus.Slots{slots: %Tempus.Slots.List{slots: [Slot.wrap(slot)]}}])
-  end
+  def add(%Slots{slots: slots}, slot, options \\ []),
+    do: %Slots{slots: Group.add(slots, slot, options)}
 
   @spec inverse(slots :: Slots.t(), keyword()) :: Slots.t()
   @doc """
@@ -165,7 +165,6 @@ defmodule Tempus.Slots do
   end
 
   def flatten(slots, options \\ [])
-
   def flatten(%Slots{slots: slots}, options), do: Group.flatten(slots, options)
 
   @spec wrap([Slot.origin()] | Slots.t(), keyword()) :: Slots.t()

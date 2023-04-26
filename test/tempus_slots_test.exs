@@ -5,6 +5,7 @@ defmodule Tempus.Slots.Test do
   doctest Tempus.Slots.Stream
 
   alias Tempus.{Slot, Slots}
+  import Tempus.Sigils
 
   setup_all do
     _micros_in_hour = 3_600_000_000
@@ -22,11 +23,51 @@ defmodule Tempus.Slots.Test do
     end
 
     test "identity/1", %{slots: slots} do
-      assert %Slots.List{slots: []} = Slots.identity(slots)
+      assert %Slots{slots: %Slots.List{slots: []}} = Slots.identity(slots)
     end
 
     test "flatten/1", %{input: input, slots: slots} do
       assert Enum.map(input, &Slot.wrap/1) == Slots.flatten(slots)
+    end
+
+    test "add/3", %{input: _input, slots: slots} do
+      assert %Slots{
+               slots: %Slots.List{
+                 slots: [
+                   ~I(2023-01-01T00:00:00.000000Z → 2023-01-05T23:59:59.999999Z),
+                   ~I(2023-01-07T00:00:00.000000Z → 2023-01-07T23:59:59.999999Z) | _
+                 ]
+               }
+             } = Slots.add(slots, ~I|2023-01-02 → 2023-01-04|d, join: true)
+
+      assert %Slots{
+               slots: %Slots.List{
+                 slots: [
+                   ~I(2023-01-01T00:00:00.000000Z → 2023-01-01T23:59:59.999999Z),
+                   ~I(2023-01-02T00:00:00.000000Z → 2023-01-04T23:59:59.999999Z) | _
+                 ]
+               }
+             } = Slots.add(slots, ~I|2023-01-02 → 2023-01-04|d, join: false)
+    end
+
+    test "merge/3", %{input: _input, slots: slots} do
+      assert %Slots{
+               slots: %Slots.List{
+                 slots: [
+                   ~I(2023-01-01T00:00:00.000000Z → 2023-01-05T23:59:59.999999Z),
+                   ~I(2023-01-07T00:00:00.000000Z → 2023-01-07T23:59:59.999999Z) | _
+                 ]
+               }
+             } = Slots.merge(slots, Slots.wrap(~I|2023-01-02 → 2023-01-04|d), join: true)
+
+      assert %Slots{
+               slots: %Slots.List{
+                 slots: [
+                   ~I(2023-01-01T00:00:00.000000Z → 2023-01-01T23:59:59.999999Z),
+                   ~I(2023-01-02T00:00:00.000000Z → 2023-01-04T23:59:59.999999Z) | _
+                 ]
+               }
+             } = Slots.merge(slots, Slots.wrap(~I|2023-01-02 → 2023-01-04|d), join: false)
     end
   end
 end
