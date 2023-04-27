@@ -105,7 +105,7 @@ defmodule Tempus.Test do
         )
     }
 
-    assert Enum.take(Tempus.Slots.merge([slots, stream]), 4) == [
+    assert Enum.take(Tempus.Slots.merge([slots, stream], join: true), 4) == [
              %Tempus.Slot{
                from: ~U[2020-08-06 00:00:00.000000Z],
                to: ~U[2020-08-06 23:59:59.999999Z]
