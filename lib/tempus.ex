@@ -14,6 +14,8 @@ defmodule Tempus do
 
   alias Tempus.{Slot, Slots}
 
+  import Tempus.Guards
+
   @typedoc "Direction for slots navigation"
   @type direction :: :fwd | :bwd
   @typedoc "Number of slots (`:stream` means lazy folding, unknown upfront)"
@@ -167,18 +169,17 @@ defmodule Tempus do
   def free?(%Slots{slots: []}, _, _), do: true
 
   def free?(%Slots{} = slots, %Slot{} = slot, :size),
-    do: Slots.size(Slots.add(slots, slot)) == Slots.size(slots) + 1
+    do: Slots.count(Slots.add(slots, slot)) == Slots.count(slots) + 1
 
-  def free?(%Slots{slots: slots}, %Slot{} = origin, :smart) do
-    Enum.reduce_while(slots, true, fn
-      %Slot{} = current, true ->
-        case Slot.compare(current, origin, true) do
-          :gt -> {:halt, true}
-          :eq -> {:halt, false}
-          :joint -> {:halt, false}
-          :lt -> {:cont, true}
-        end
-    end)
+  def free?(%Slots{} = slots, %Slot{} = origin, :smart) do
+    slots
+    |> Slots.drop_until(origin)
+    |> Enum.take(1)
+    |> case do
+      [] -> true
+      [slot] when is_joint(slot, origin) -> false
+      _ -> true
+    end
   end
 
   def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)

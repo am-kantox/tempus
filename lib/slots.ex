@@ -22,6 +22,8 @@ defmodule Tempus.Slots do
 
   alias Tempus.{Slot, Slots, Slots.Group}
 
+  import Tempus.Guards
+
   @type container :: Enumerable.t(Slot.t())
   @opaque implementation(group) :: %{__struct__: group, slots: container()}
   @type t(group) :: %Slots{slots: implementation(group)}
@@ -55,6 +57,20 @@ defmodule Tempus.Slots do
 
   @spec flatten(t(), keyword()) :: [Slot.t()]
   def flatten(%Slots{slots: slots}, options \\ []), do: Group.flatten(slots, options)
+
+  @spec drop_until(t(), Slot.origin(), keyword()) :: t()
+  def drop_until(%Slots{slots: %implementation{} = slots}, origin, options \\ []) do
+    case Group.drop_until(slots, origin, options) do
+      {:ok, slots} ->
+        %Slots{slots: slots}
+
+      {:error, _} ->
+        slots
+        |> Group.flatten(options)
+        |> Enum.drop_while(&is_coming_before(&1, origin))
+        |> wrap(Keyword.put(options, :implementation, implementation))
+    end
+  end
 
   @spec add(slots :: t(), slot :: Slot.origin()) :: t()
   @doc """
