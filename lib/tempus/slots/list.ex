@@ -373,7 +373,7 @@ defmodule Tempus.Slots.List do
           _ -> false
         end
         |> case do
-          i when is_integer(i) and i >= 0 ->
+          i when is_integer(i) and i >= 0 and length(slots) > 3 ->
             [hd(slots), "… ‹#{length(slots) - 2 - i} more› …" | Enum.slice(slots, -i - 1, i + 1)]
 
           _ ->

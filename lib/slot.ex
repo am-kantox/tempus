@@ -474,9 +474,9 @@ defmodule Tempus.Slot do
   def shift(%Slot{from: from, to: to}, action \\ []) do
     {multiplier, unit} =
       case Keyword.get(action, :unit, :microsecond) do
-        :day -> {60 * 60 * 24, :second}
-        :hour -> {60 * 60, :second}
-        :minute -> {60, :second}
+        :day -> {60 * 60 * 24 * 1_000_000, :microsecond}
+        :hour -> {60 * 60 * 1_000_000, :microsecond}
+        :minute -> {60 * 1_000_000, :microsecond}
         other -> {1, other}
       end
 

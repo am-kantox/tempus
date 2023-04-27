@@ -176,7 +176,7 @@ defmodule Tempus.Slots.Stream do
 
       {to_emit, maybe_rest} = Enum.split_while(slots, head_splitter)
       {to_merge, rest} = Enum.split_while(maybe_rest, joint_splitter)
-      {to_emit ++ [Tempus.Slot.join([slot | to_merge])], rest}
+      {to_emit, [Tempus.Slot.join([slot | to_merge]) | rest]}
     end
 
     reducer = fn
@@ -205,7 +205,8 @@ defmodule Tempus.Slots.Stream do
           %Slots.Stream{
             slots: [stream, other] |> Enum.map(&Stream.drop(&1, idx)) |> Stream.concat()
           },
-          acc
+          acc,
+          options
         )
 
       {slots, []}
@@ -370,7 +371,17 @@ defmodule Tempus.Slots.Stream do
 
     def identity(%Slots.Stream{}), do: Slots.Stream.new()
 
-    def flatten(%Slots.Stream{slots: stream}, _options \\ []), do: Enum.to_list(stream)
+    def flatten(%Slots.Stream{slots: stream}, options \\ []) do
+      options
+      |> Keyword.get(:until)
+      |> case do
+        nil -> stream
+        count when is_integer(count) -> Stream.take(stream, count)
+        origin when is_origin(origin) -> Stream.take_while(stream, &is_coming_before(&1, origin))
+        fun when is_function(fun, 1) -> Stream.take_while(stream, &(not fun.(&1)))
+      end
+      |> Enum.to_list()
+    end
 
     def add(%Slots.Stream{} = stream, slot, options), do: Slots.Stream.add(stream, slot, options)
 
@@ -418,7 +429,7 @@ defmodule Tempus.Slots.Stream do
       )
     end
 
-    def merge(%Slots.Stream{} = slots, %Slots.Stream{} = other, options),
+    def merge(%Slots.Stream{} = slots, other, options),
       do: {:ok, Slots.Stream.merge(slots, other, options)}
 
     def inverse(%Slots.Stream{} = slots, options \\ []),
@@ -446,7 +457,7 @@ defmodule Tempus.Slots.Stream do
     import Inspect.Algebra
 
     def inspect(%Tempus.Slots.Stream{slots: slots}, opts) do
-      concat(["𝕋[", to_doc(slots, opts), "]"])
+      concat(["𝕋ˢ<", to_doc(slots, opts), ">"])
     end
   end
 end

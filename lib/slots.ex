@@ -35,6 +35,7 @@ defmodule Tempus.Slots do
   Creates an instance of slots, using a backend given as a parameter.
   """
   def new(implementation \\ @implementation, data)
+  def new(@implementation, %implementation{} = data), do: new(implementation, data)
   def new(:list, data), do: new(Slots.List, data)
   def new(:stream, data), do: new(Slots.Stream, data)
   def new(implementation, data), do: %Slots{slots: Enum.into(data, implementation.new())}
