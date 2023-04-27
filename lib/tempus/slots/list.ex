@@ -23,6 +23,7 @@ defmodule Tempus.Slots.List do
 
   import Tempus.Guards
   import Tempus.Slot, only: [void: 0]
+  import Tempus.Slots.Options
 
   @type t :: Slots.t(Slots.List)
 
@@ -243,14 +244,6 @@ defmodule Tempus.Slots.List do
     case Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1) do
       void() -> slots
       slot -> [slot | slots]
-    end
-  end
-
-  defp pop_jid(options) do
-    case Keyword.get(options, :join, nil) do
-      true -> 1
-      false -> nil
-      value -> value
     end
   end
 

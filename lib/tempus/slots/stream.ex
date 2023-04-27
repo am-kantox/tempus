@@ -23,35 +23,34 @@ defmodule Tempus.Slots.Stream do
 
   import Tempus.Guards
   import Tempus.Slot, only: [void: 0]
+  import Tempus.Slots.Options
 
   defstruct slots: nil
 
-  @type t :: %{
-          __struct__: Tempus.Slots.Stream,
-          slots: Enumerable.t(Slot.t())
-        }
+  @type t :: Slots.t(Slots.Stream)
 
   @doc false
   defmacro slots do
     case __CALLER__.context do
       nil ->
-        quote generated: true, do: %Tempus.Slots.Stream{slots: Stream.map([], & &1)}
+        quote generated: true, do: %Slots.Stream{slots: Stream.map([], & &1)}
 
       :match ->
         quote do
-          %Tempus.Slots.Stream{slots: slots}
+          %Slots.Stream{slots: var!(slots)}
           when is_struct(slots, Stream) or is_function(slots, 2)
         end
 
       :guard ->
         quote do
-          %Tempus.Slots.Stream{slots: slots}
+          %Slots.Stream{slots: slots}
           when is_struct(slots, Stream) or is_function(slots, 2)
         end
     end
   end
 
   @behaviour Slots.Behaviour
+
   @doc false
   @impl Slots.Behaviour
   def new, do: slots()
@@ -83,23 +82,50 @@ defmodule Tempus.Slots.Stream do
   def add(%Slots.Stream{slots: nil}, slot, options),
     do: add(slots(), slot, options)
 
-  def add(%Slots.Stream{slots: stream}, slot, _options) do
-    slot = Slot.wrap(slot)
+  def add(%Slots.Stream{slots: stream}, slot, options) do
+    stream =
+      options
+      |> pop_jid()
+      |> do_add(Slot.wrap(slot), stream)
 
+    %Slots.Stream{slots: stream}
+  end
+
+  defp do_add(jid, slot, stream) do
     last_fun = fn
       nil -> {[], []}
       slot -> {[slot], []}
     end
 
-    reducer = fn
+    Stream.transform(stream, fn -> slot end, do_reducer(jid), last_fun, & &1)
+  end
+
+  defp do_reducer(nil) do
+    fn
       slot, nil -> {[slot], nil}
       slot, s when is_coming_before(slot, s) -> {[slot], s}
       slot, s when is_coming_before(s, slot) -> {[s, slot], nil}
-      slot, s -> {[Slot.join(slot, s)], nil}
+      slot, s -> {[], Slot.join(slot, s)}
     end
+  end
 
-    stream = Stream.transform(stream, fn -> slot end, reducer, last_fun, & &1)
-    %Slots.Stream{slots: stream}
+  defp do_reducer(jid) do
+    fn
+      slot, nil ->
+        {[slot], nil}
+
+      slot, s ->
+        cond do
+          is_coming_before(slot, s) and not joint_in_delta?(slot, s, jid) ->
+            {[slot], s}
+
+          is_coming_before(s, slot) and not joint_in_delta?(s, slot, jid) ->
+            {[s, slot], nil}
+
+          true ->
+            {[], Slot.join(slot, s)}
+        end
+    end
   end
 
   ###########################################################################
@@ -131,19 +157,19 @@ defmodule Tempus.Slots.Stream do
   def merge(slots, other, options \\ [])
 
   def merge(%Slots.Stream{slots: stream}, %Slots.List{slots: list}, options) do
-    join_in_delta = Keyword.get(options, :join, 1)
+    jid = pop_jid(options)
 
-    split = fn slot, slots, join_in_delta ->
+    split = fn slot, slots, jid ->
       head_splitter =
-        if join_in_delta do
-          &(is_coming_before(&1, slot) and not joint_in_delta?(&1, slot, join_in_delta))
+        if jid do
+          &(is_coming_before(&1, slot) and not joint_in_delta?(&1, slot, jid))
         else
           &is_coming_before(&1, slot)
         end
 
       joint_splitter =
-        if join_in_delta do
-          &(not is_coming_before(slot, &1) or joint_in_delta?(slot, &1, join_in_delta))
+        if jid do
+          &(not is_coming_before(slot, &1) or joint_in_delta?(slot, &1, jid))
         else
           &(not is_coming_before(slot, &1))
         end
@@ -157,11 +183,11 @@ defmodule Tempus.Slots.Stream do
       slot, [] ->
         {[slot], []}
 
-      slot, [h | _] = list when is_coming_before(slot, h) and join_in_delta == false ->
+      slot, [h | _] = list when is_coming_before(slot, h) and jid == false ->
         {[slot], list}
 
       slot, list ->
-        split.(slot, list, join_in_delta)
+        split.(slot, list, jid)
     end
 
     stream = Stream.transform(stream, fn -> list end, reducer, fn acc -> {acc, []} end, & &1)
@@ -169,7 +195,7 @@ defmodule Tempus.Slots.Stream do
   end
 
   def merge(%Slots.Stream{slots: stream}, %Slots.Stream{slots: other}, options) do
-    join_in_delta = Keyword.get(options, :join, 1)
+    jid = pop_jid(options)
 
     start_fun = fn -> {0, %Slots.List{}} end
 
@@ -193,7 +219,7 @@ defmodule Tempus.Slots.Stream do
 
       {e1, e2, idx}, {_, %Slots.List{slots: []}} ->
         cond do
-          join_in_delta && joint_in_delta?(e1, e2, join_in_delta) ->
+          jid && joint_in_delta?(e1, e2, jid) ->
             {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
 
           is_coming_before(e1, e2) ->
@@ -282,7 +308,7 @@ defmodule Tempus.Slots.Stream do
   end
 
   @doc """
-  Procduces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
+  Produces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
     of elements emitted.
 
   By default, slots will be joined if they are 1μsec aside.
@@ -290,13 +316,13 @@ defmodule Tempus.Slots.Stream do
   @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), keyword()) :: Slots.Stream.t()
   def iterate(start_value, next_fun, options \\ []) do
     next_fun = &(&1 |> next_fun.() |> Slot.wrap())
-    join_in_delta = Keyword.get(options, :join, 1)
+    jid = pop_jid(options)
 
     stream =
       Stream.unfold(Slot.wrap(start_value), fn
         %Slot{} = value ->
-          if join_in_delta,
-            do: collect_joint(value, next_fun, join_in_delta),
+          if jid,
+            do: collect_joint(value, next_fun, jid),
             else: {value, next_fun.(value)}
       end)
 

@@ -467,14 +467,29 @@ defmodule Tempus.Slot do
   @doc false
   @spec shift(
           slot :: t(),
-          action :: [{:to, integer()} | {:from, integer} | {:unit, System.time_unit()}]
+          action :: [
+            {:to, integer()} | {:from, integer()} | {:by, integer()} | {:unit, System.time_unit()}
+          ]
         ) :: Slot.t()
   def shift(%Slot{from: from, to: to}, action \\ []) do
-    unit = Keyword.get(action, :unit, :microsecond)
-    from = do_shift(from, Keyword.get(action, :from, 0), unit)
-    to = do_shift(to, Keyword.get(action, :to, 0), unit)
+    {multiplier, unit} =
+      case Keyword.get(action, :unit, :microsecond) do
+        :day -> {60 * 60 * 24, :second}
+        :hour -> {60 * 60, :second}
+        :minute -> {60, :second}
+        other -> {1, other}
+      end
 
-    check_shifted(from, to)
+    [by_from, by_to] =
+      action
+      |> Keyword.get(:by)
+      |> case do
+        nil -> Enum.map([:from, :to], &Keyword.get(action, &1, 0))
+        value -> [value, value]
+      end
+      |> Enum.map(&(&1 * multiplier))
+
+    check_shifted(do_shift(from, by_from, unit), do_shift(to, by_to, unit))
   end
 
   defp check_shifted(from, to) when not is_coming_before(to, from), do: %Slot{from: from, to: to}
