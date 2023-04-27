@@ -4,10 +4,7 @@ defmodule Tempus.Slots.Behaviour do
   """
 
   @doc """
-  The callback to be implemented by implementations to create new instances
+  Creates a new instance, which is also usually an identity element
   """
-  @callback new :: %{
-              __struct__: module(),
-              slots: Tempus.Slots.container()
-            }
+  @callback new :: Tempus.Slots.Group.t()
 end

@@ -29,11 +29,10 @@ defmodule Tempus.Slots.List do
   defstruct slots: []
 
   @doc false
-  defmacro slots do
-    quote do: %Tempus.Slots.List{}
-  end
+  defmacro slots, do: quote(do: %Tempus.Slots.List{})
 
   @behaviour Slots.Behaviour
+
   @doc false
   @impl Slots.Behaviour
   def new, do: slots()
@@ -222,7 +221,7 @@ defmodule Tempus.Slots.List do
       ]}
   """
   @spec inverse(Slots.List.t(), keyword()) :: Slots.List.t()
-  @telemetria level: :info
+  @telemetria level: :debug
   def inverse(slots, options \\ [])
 
   def inverse(%Slots.List{slots: [void()]}, _options), do: %Slots.List{slots: []}
@@ -245,12 +244,6 @@ defmodule Tempus.Slots.List do
       void() -> slots
       slot -> [slot | slots]
     end
-  end
-
-  @spec split_while(Slots.List.t(), (Slot.t() -> boolean())) :: {Slots.List.t(), Slots.List.t()}
-  def split_while(%Slots.List{slots: slots}, fun) do
-    {h, t} = Enum.split_while(slots, fun)
-    {%Slots.List{slots: h}, %Slots.List{slots: t}}
   end
 
   defp pop_jid(options) do
@@ -308,14 +301,15 @@ defmodule Tempus.Slots.List do
 
     def drop_until(slots, origin, options \\ []) do
       adjustment = Keyword.get(options, :adjustment, 0)
-      do_drop_until(slots, origin, adjustment)
+      slots = do_drop_until(slots, origin, adjustment)
+      {:ok, %Slots.List{slots: slots}}
     end
 
     defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment) when adjustment >= 0,
-      do: {:ok, do_next(slots, Slot.wrap(origin), adjustment)}
+      do: do_next(slots, Slot.wrap(origin), adjustment)
 
     defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment),
-      do: {:ok, do_previous(slots, Slot.wrap(origin), adjustment + 1)}
+      do: do_previous(slots, Slot.wrap(origin), adjustment + 1)
 
     defp do_next([], _origin, _count), do: []
 
@@ -378,7 +372,7 @@ defmodule Tempus.Slots.List do
     def inspect(%Tempus.Slots.List{slots: slots}, opts) do
       inner_doc =
         opts.custom_options
-        |> Keyword.get(:truncate, false)
+        |> Keyword.get(:truncate, true)
         |> case do
           false -> false
           true -> 0
@@ -393,7 +387,7 @@ defmodule Tempus.Slots.List do
             slots
         end
 
-      concat(["𝕋", to_doc(inner_doc, opts)])
+      concat(["𝕋ˡ<", to_doc(inner_doc, opts), ">"])
     end
   end
 end

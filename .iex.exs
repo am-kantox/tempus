@@ -54,7 +54,4 @@ weekends =
     end
   )}
 
-slots =
-  [~D|2018-01-01|, ~D|2022-12-31|]
-  |> Enum.into(%Slots{})
-  |> Slots.merge(weekends)
+list = ~D|2023-01-01| |> Stream.iterate(&Date.add(&1, 2)) |> Enum.take(10) |> Enum.into(%Slots.List{})

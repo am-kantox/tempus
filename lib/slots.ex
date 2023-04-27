@@ -23,8 +23,8 @@ defmodule Tempus.Slots do
   alias Tempus.{Slot, Slots, Slots.Group}
 
   @type container :: Enumerable.t(Slot.t())
-  @opaque container_type(implementation) :: %{__struct__: implementation, slots: container()}
-  @type t(implementation) :: %Slots{slots: container_type(implementation)}
+  @opaque implementation(group) :: %{__struct__: group, slots: container()}
+  @type t(group) :: %Slots{slots: implementation(group)}
   @type t() :: t(Slots.List)
 
   @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
@@ -51,6 +51,33 @@ defmodule Tempus.Slots do
   @spec identity(t()) :: container()
   @doc false
   def identity(%Slots{slots: slots}), do: %Slots{slots: Group.identity(slots)}
+
+  @spec flatten(t(), keyword()) :: [Slot.t()]
+  def flatten(%Slots{slots: slots}, options \\ []), do: Group.flatten(slots, options)
+
+  @spec add(slots :: t(), slot :: Slot.origin()) :: t()
+  @doc """
+  Adds another slot to the slots collection.
+
+  Joins slots intersecting with the new one, if any.
+
+  ### Example
+
+      iex> Tempus.Slots.add(%Tempus.Slots{}, Tempus.Slot.wrap(~D|2020-08-07|))
+      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}]}}
+
+      iex> %Tempus.Slots{}
+      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-07|))
+      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-10|))
+      ...> |> Tempus.Slots.add(%Tempus.Slot{
+      ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
+      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
+        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}}
+  """
+  def add(%Slots{slots: slots}, slot, options \\ []),
+    do: %Slots{slots: Group.add(slots, slot, options)}
 
   @spec merge(slots :: t() | [t()], Enumerable.t(Slot.t()) | keyword(), keyword()) :: t()
   @doc """
@@ -101,30 +128,6 @@ defmodule Tempus.Slots do
     merge([%Slots{slots: next} | rest], options)
   end
 
-  @spec add(slots :: t(), slot :: Slot.origin()) :: t()
-  @doc """
-  Adds another slot to the slots collection.
-
-  Joins slots intersecting with the new one, if any.
-
-  ### Example
-
-      iex> Tempus.Slots.add(%Tempus.Slots{}, Tempus.Slot.wrap(~D|2020-08-07|))
-      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}]}}
-
-      iex> %Tempus.Slots{}
-      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-07|))
-      ...> |> Tempus.Slots.add(Tempus.Slot.wrap(~D|2020-08-10|))
-      ...> |> Tempus.Slots.add(%Tempus.Slot{
-      ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
-      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
-        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}}
-  """
-  def add(%Slots{slots: slots}, slot, options \\ []),
-    do: %Slots{slots: Group.add(slots, slot, options)}
-
   @spec inverse(slots :: Slots.t(), keyword()) :: Slots.t()
   @doc """
   Inverses `Slots` returning the new `Slots` instance with slots set where
@@ -163,9 +166,6 @@ defmodule Tempus.Slots do
       {:error, _} -> raise "Not yet implemented"
     end
   end
-
-  def flatten(slots, options \\ [])
-  def flatten(%Slots{slots: slots}, options), do: Group.flatten(slots, options)
 
   @spec wrap([Slot.origin()] | Slots.t(), keyword()) :: Slots.t()
   @doc since: "0.3.0"

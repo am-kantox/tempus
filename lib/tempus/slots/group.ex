@@ -3,49 +3,47 @@ defprotocol Tempus.Slots.Group do
   The protocol to implement for the ordered collection of slots.
   """
 
-  alias Tempus.{Slot, Slots}
+  alias Tempus.Slot
 
   @doc """
-  The function returning the identity element for this `t:Slots.container()`
-    implementation.
+  The function returning the identity element, which can be merged into
+  each and every implementation without changing it.
   """
-  @spec identity(Slots.container()) :: Slots.container()
+  @spec identity(t()) :: t()
   def identity(slots)
 
   @doc """
-  Flattens the implementation of `t:Slots.container()`, returning the list back.
+  Flattens the implementation, returning the list back.
   """
-  @spec flatten(Slots.container(), keyword()) :: [Slot.t()]
-  def flatten(slots, options)
+  @spec flatten(t(), keyword()) :: [Slot.t()]
+  def flatten(slots, options \\ [])
 
   @doc """
-  Adds a single `t:Slot.t()` instance to this `t:Slots.container()`
+  Adds a single `t:Slot.t()` instance to this `t:Slots.t(t())`
     implementation. If `merge/3` implementation returns `{:error, __MODULE__}`,
     this function would be used to add elements one by one through `reduce/3`.
   """
-  @spec add(Slots.container(), Slot.origin(), keyword()) :: Slots.container()
-  def add(slots, slot, options)
-
-  @doc """
-  Efficient implementation of fast forwarding slots. If this function
-    returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
-  """
-  @spec drop_until(Slots.container(), Slot.origin(), keyword()) ::
-          {:ok, Slots.container()} | {:error, module()}
-  def drop_until(slots, origin, options)
+  @spec add(t(), Slot.origin(), keyword()) :: t()
+  def add(slots, slot, options \\ [])
 
   @doc """
   Efficient implementation of merging slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
-  @spec merge(Slots.container(), [Slot.t()] | Slots.container(), keyword()) ::
-          {:ok, Slots.container()} | {:error, module()}
-  def merge(slots, other, options)
+  @spec merge(t(), [Slot.t()] | t(), keyword()) :: {:ok, t()} | {:error, module()}
+  def merge(slots, other, options \\ [])
+
+  @doc """
+  Efficient implementation of fast forwarding slots. If this function
+    returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
+  """
+  @spec drop_until(t(), Slot.origin(), keyword()) :: {:ok, t()} | {:error, module()}
+  def drop_until(slots, origin, options \\ [])
 
   @doc """
   Efficient implementation of inversing slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
-  @spec inverse(Slots.container(), keyword()) :: {:ok, Slots.container()} | {:error, module()}
-  def inverse(slots, options)
+  @spec inverse(t(), keyword()) :: {:ok, t()} | {:error, module()}
+  def inverse(slots, options \\ [])
 end

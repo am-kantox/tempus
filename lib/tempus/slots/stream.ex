@@ -205,11 +205,8 @@ defmodule Tempus.Slots.Stream do
 
       {e1, e2, idx}, {_, acc} ->
         wrapper = if is_coming_before(e1.from, e2.from), do: e1, else: e2
-
-        {%Slots.List{slots: to_emit}, rest} =
-          Slots.List.split_while(acc, &is_coming_before(&1, wrapper))
-
-        {to_emit, {idx, rest |> Slots.List.add(e1) |> Slots.List.add(e2)}}
+        {to_emit, rest} = Enum.split_while(acc, &is_coming_before(&1, wrapper))
+        {to_emit, {idx, %Slots.List{slots: rest} |> Slots.List.add(e1) |> Slots.List.add(e2)}}
     end
 
     merged =
