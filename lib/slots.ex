@@ -23,11 +23,14 @@ defmodule Tempus.Slots do
   alias Tempus.{Slot, Slots, Slots.Group}
 
   import Tempus.Guards
+  import Tempus.Slots.Normalizers
 
   @type container :: Enumerable.t(Slot.t())
   @opaque implementation(group) :: %{__struct__: group, slots: container()}
   @type t(group) :: %Slots{slots: implementation(group)}
-  @type t() :: t(Slots.List)
+  @type t :: t(Slots.List)
+  @typedoc "The type to use in navigation and/or rewinding slots enumerables"
+  @type locator :: Slot.origin() | (Slot.t() -> boolean())
 
   @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
 
@@ -58,17 +61,20 @@ defmodule Tempus.Slots do
   @spec flatten(t(), keyword()) :: [Slot.t()]
   def flatten(%Slots{slots: slots}, options \\ []), do: Group.flatten(slots, options)
 
-  @spec drop_until(t(), Slot.origin(), keyword()) :: t()
-  def drop_until(%Slots{slots: %implementation{} = slots}, origin, options \\ []) do
-    case Group.drop_until(slots, origin, options) do
-      {:ok, slots} ->
-        %Slots{slots: slots}
+  @spec split(t(), locator(), keyword()) :: {t(), t()}
+  def split(%Slots{slots: %implementation{} = slots}, origin, options \\ [])
+      when is_locator(origin) do
+    case Group.split(slots, origin, options) do
+      {:ok, head, tail} ->
+        {%Slots{slots: head}, %Slots{slots: tail}}
 
       {:error, _} ->
         slots
         |> Group.flatten(options)
-        |> Enum.drop_while(&is_coming_before(&1, origin))
-        |> wrap(Keyword.put(options, :implementation, implementation))
+        |> Enum.split_with(to_locator(origin))
+        |> Tuple.to_list()
+        |> Enum.map(&wrap(&1, Keyword.put(options, :implementation, implementation)))
+        |> List.to_tuple()
     end
   end
 
@@ -93,8 +99,8 @@ defmodule Tempus.Slots do
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}}
   """
-  def add(%Slots{slots: slots}, slot, options \\ []),
-    do: %Slots{slots: Group.add(slots, slot, options)}
+  def add(%Slots{slots: slots}, slot, options \\ []) when is_origin(slot),
+    do: %Slots{slots: Group.add(slots, Slot.wrap(slot), options)}
 
   @spec merge(slots :: t() | [t()], Enumerable.t(Slot.t()) | keyword(), keyword()) :: t()
   @doc """
@@ -247,27 +253,7 @@ defmodule Tempus.Slots do
     import Inspect.Algebra
 
     def inspect(%Tempus.Slots{slots: slots}, opts) do
-      inner_doc =
-        opts.custom_options
-        |> Keyword.get(:truncate, false)
-        |> case do
-          false -> false
-          true -> 0
-          i when is_integer(i) and i < length(slots) - 2 -> i
-          _ -> false
-        end
-        |> case do
-          i when is_integer(i) and i >= 0 ->
-            Enum.slice(slots.slots, 0, 1) ++
-              [
-                "… ‹#{Enum.count(slots) - 2 - i} more› …" | Enum.slice(slots.slots, -i - 1, i + 1)
-              ]
-
-          _ ->
-            slots
-        end
-
-      concat(["#Slots<", to_doc(inner_doc, opts), ">"])
+      concat(["#Slots<", to_doc(slots, opts), ">"])
     end
   end
 end

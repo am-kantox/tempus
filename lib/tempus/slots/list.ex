@@ -23,9 +23,11 @@ defmodule Tempus.Slots.List do
 
   import Tempus.Guards
   import Tempus.Slot, only: [void: 0]
-  import Tempus.Slots.Options
+  import Tempus.Slots.Normalizers
 
   @type t :: Slots.t(Slots.List)
+
+  @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
 
   defstruct slots: []
 
@@ -247,6 +249,92 @@ defmodule Tempus.Slots.List do
     end
   end
 
+  @doc """
+  Splits the slots by the pivot given as a `t:Slot.t` or as a function.
+  """
+  @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
+  def split(slots, origin, options \\ []) when is_locator(origin) do
+    {tail, reversed_head} = do_split_until(slots, origin, Keyword.get(options, :adjustment, 0))
+    {Enum.reverse(reversed_head), tail}
+  end
+
+  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment)
+       when is_origin(origin) and adjustment >= 0,
+       do: do_next(slots, Slot.wrap(origin), adjustment, [])
+
+  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment) when is_origin(origin),
+    do: do_previous(slots, Slot.wrap(origin), -adjustment, [])
+
+  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment)
+       when is_function(origin, 1) and adjustment >= 0,
+       do: do_next(slots, origin, adjustment, [])
+
+  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment) when is_function(origin, 1),
+    do: do_previous(slots, origin, -adjustment, [])
+
+  defp do_next([], _origin, _count, acc), do: {[], acc}
+
+  defp do_next([%Slot{} = head | _] = list, %Slot{} = origin, count, acc)
+       when not is_coming_before(head, origin),
+       do: do_skip(list, count, acc)
+
+  defp do_next([%Slot{} = head | tail], %Slot{} = origin, count, acc),
+    do: do_next(tail, origin, count, [head | acc])
+
+  defp do_next([%Slot{} = head | tail] = list, locator, count, acc) when is_function(locator, 1),
+    do:
+      if(locator.(head),
+        do: do_skip(list, count, acc),
+        else: do_next(tail, locator, count, [head | acc])
+      )
+
+  defp do_skip([], _count, acc), do: {[], acc}
+  defp do_skip([_ | _] = result, count, acc) when count <= 0, do: {result, acc}
+  defp do_skip([head | tail], count, acc), do: do_skip(tail, count - 1, [head | acc])
+
+  defmacrop match_n_slots(0) do
+    quote generated: true,
+          do: [var!(slot_before) = var!(head), var!(slot_after) | _] = var!(list)
+  end
+
+  defmacrop match_n_slots(1) do
+    quote generated: true,
+          do: [var!(head), var!(slot_before), var!(slot_after) | _] = var!(list)
+  end
+
+  defmacrop match_n_slots(count) when count >= 2 do
+    underscores = List.duplicate({:_, [], nil}, count - 1)
+
+    quote generated: true do
+      [var!(head), unquote_splicing(underscores), var!(slot_before), var!(slot_after) | _] =
+        var!(list)
+    end
+  end
+
+  Enum.each(0..@lookbehinds, fn count ->
+    defp do_previous(match_n_slots(unquote(count)), %Slot{} = origin, unquote(count), acc)
+         when not is_coming_before(origin, slot_before) and is_coming_before(origin, slot_after),
+         do: {list, acc}
+
+    defp do_previous(match_n_slots(unquote(count)), %Slot{} = origin, unquote(count), acc),
+      do: do_previous(tl(list), origin, unquote(count), [head | acc])
+
+    defp do_previous(match_n_slots(unquote(count)), locator, unquote(count), acc)
+         when is_function(locator, 1) do
+      if not locator.(slot_before) and locator.(slot_after),
+        do: {list, acc},
+        else: do_previous(tl(list), locator, unquote(count), [head | acc])
+    end
+  end)
+
+  defp do_previous(_slots, _origin, count, _acc) when count > @lookbehinds do
+    raise(
+      ArgumentError,
+      "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
+    )
+  end
+  defp do_previous(slots, _origin, _count, acc), do: {Enum.reverse(acc) ++ slots, []}
+
   defimpl Enumerable do
     @moduledoc false
     def reduce(_slots, {:halt, acc}, _fun), do: {:halted, acc}
@@ -267,73 +355,17 @@ defmodule Tempus.Slots.List do
   defimpl Slots.Group do
     @moduledoc false
 
-    @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
-
-    defmacrop match_n_slots(0) do
-      quote generated: true,
-            do: [var!(slot_before) = var!(head), var!(slot_after) | _] = var!(list)
-    end
-
-    defmacrop match_n_slots(1) do
-      quote generated: true,
-            do: [var!(head), var!(slot_before), var!(slot_after) | _] = var!(list)
-    end
-
-    defmacrop match_n_slots(count) when count >= 2 do
-      underscores = List.duplicate({:_, [], nil}, count - 1)
-
-      quote generated: true do
-        [var!(head), unquote_splicing(underscores), var!(slot_before), var!(slot_after) | _] =
-          var!(list)
-      end
-    end
-
     def identity(%Slots.List{slots: _}), do: %Slots.List{slots: []}
+
     def flatten(%Slots.List{slots: slots}, _options \\ []), do: slots
-    def add(%Slots.List{} = slots, slot, options \\ []), do: Slots.List.add(slots, slot, options)
 
-    def drop_until(slots, origin, options \\ []) do
-      adjustment = Keyword.get(options, :adjustment, 0)
-      slots = do_drop_until(slots, origin, adjustment)
-      {:ok, %Slots.List{slots: slots}}
+    def add(%Slots.List{} = slots, slot, options \\ []) when is_origin(slot),
+      do: Slots.List.add(slots, slot, options)
+
+    def split(slots, origin, options \\ []) when is_locator(origin) do
+      {head, tail} = Slots.List.split(slots, origin, options)
+      {:ok, %Slots.List{slots: head}, %Slots.List{slots: tail}}
     end
-
-    defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment) when adjustment >= 0,
-      do: do_next(slots, Slot.wrap(origin), adjustment)
-
-    defp do_drop_until(%Slots.List{slots: slots}, origin, adjustment),
-      do: do_previous(slots, Slot.wrap(origin), adjustment + 1)
-
-    defp do_next([], _origin, _count), do: []
-
-    defp do_next([%Slot{} = head | _] = list, origin, count)
-         when not is_coming_before(head, origin),
-         do: do_skip(list, count)
-
-    defp do_next([%Slot{} = _ | tail], origin, count), do: do_next(tail, origin, count)
-
-    defp do_skip([], _count), do: []
-    defp do_skip([_ | _] = result, count) when count <= 0, do: result
-    defp do_skip([_ | t], count), do: do_skip(t, count - 1)
-
-    Enum.each(0..@lookbehinds, fn count ->
-      defp do_previous(match_n_slots(unquote(count)), origin, unquote(count))
-           when not is_coming_before(origin, slot_before) and
-                  is_coming_before(origin, slot_after),
-           do: list
-
-      defp do_previous(match_n_slots(unquote(count)), origin, unquote(count)),
-        do: do_previous(tl(list), origin, unquote(count))
-    end)
-
-    defp do_previous(_slots, _origin, count) when count > @lookbehinds do
-      raise(
-        ArgumentError,
-        "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
-      )
-    end
-
-    defp do_previous(_, _origin, _count), do: nil
 
     def merge(%Slots.List{} = slots, %_{} = other, options),
       do: {:ok, Slots.List.merge(slots, other, options)}

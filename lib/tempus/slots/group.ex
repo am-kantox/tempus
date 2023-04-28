@@ -34,11 +34,11 @@ defprotocol Tempus.Slots.Group do
   def merge(slots, other, options \\ [])
 
   @doc """
-  Efficient implementation of fast forwarding slots. If this function
+  Efficient implementation of splitting slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
-  @spec drop_until(t(), Slot.origin(), keyword()) :: {:ok, t()} | {:error, module()}
-  def drop_until(slots, origin, options \\ [])
+  @spec split(t(), Slots.locator(), keyword()) :: {:ok, t(), t()} | {:error, module()}
+  def split(slots, locator, options \\ [])
 
   @doc """
   Efficient implementation of inversing slots. If this function

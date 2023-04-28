@@ -148,8 +148,7 @@ defmodule Tempus do
     end)
   end
 
-  @spec free?(slots :: Slots.t(), slot :: Slot.origin(), method :: :smart | :size) ::
-          boolean() | no_return
+  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean()
   @doc """
   Checks whether the slot is disjoined against slots.
 
@@ -163,15 +162,12 @@ defmodule Tempus do
       false
       iex> Tempus.free?(slots, ~D|2020-08-08|)
       true
+      iex> Tempus.free?(slots, ~U|2020-08-09T23:59:59.999999Z|)
+      true
+      iex> Tempus.free?(slots, DateTime.add(~U|2020-08-09T23:59:59.999999Z|, 1, :microsecond))
+      false
   """
-  def free?(slots, slot, method \\ :smart)
-
-  def free?(%Slots{slots: []}, _, _), do: true
-
-  def free?(%Slots{} = slots, %Slot{} = slot, :size),
-    do: Slots.count(Slots.add(slots, slot)) == Slots.count(slots) + 1
-
-  def free?(%Slots{} = slots, %Slot{} = origin, :smart) do
+  def free?(%Slots{} = slots, origin) when is_origin(origin) do
     slots
     |> Slots.drop_until(origin)
     |> Enum.take(1)
@@ -181,8 +177,6 @@ defmodule Tempus do
       _ -> true
     end
   end
-
-  def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)
 
   @typedoc """
   The type defining how slicing is to be applied.

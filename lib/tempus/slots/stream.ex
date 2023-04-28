@@ -23,7 +23,7 @@ defmodule Tempus.Slots.Stream do
 
   import Tempus.Guards
   import Tempus.Slot, only: [void: 0]
-  import Tempus.Slots.Options
+  import Tempus.Slots.Normalizers
 
   defstruct slots: nil
 

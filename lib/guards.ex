@@ -25,6 +25,24 @@ defmodule Tempus.Guards do
                   (is_map(term) and is_map_key(term, :__struct__) and
                      :erlang.map_get(:__struct__, term) in [Date, DateTime, Time, Slot])
 
+  @doc """
+  Guard to validate that the term given is actually a `t:Tempus.Slot.origin/0` _or_
+    a function which might be used as a slot locator.
+
+  ## Examples
+
+      iex> import Tempus.Guards, only: [is_locator: 1, is_coming_before: 2]
+      ...> is_locator(Date.utc_today())
+      true
+      ...> is_locator(& Date.utc_today() |> Slot.wrap() |> is_coming_before(&1))
+      true
+      ...> is_locator(true)
+      false
+  """
+  @spec is_locator(Slot.origin() | (Slot.t() -> boolean()) | any()) :: boolean()
+  defguard is_locator(origin)
+           when is_origin(origin) or is_function(origin, 1)
+
   defguardp is_date(term) when is_struct(term, Date)
   # defguardp is_time(term) when is_struct(term, Time)
   defguardp is_datetime(term) when is_struct(term, DateTime)
