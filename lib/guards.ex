@@ -34,7 +34,7 @@ defmodule Tempus.Guards do
       iex> import Tempus.Guards, only: [is_locator: 1, is_coming_before: 2]
       ...> is_locator(Date.utc_today())
       true
-      ...> is_locator(& Date.utc_today() |> Slot.wrap() |> is_coming_before(&1))
+      ...> is_locator(& Date.utc_today() |> Tempus.Slot.wrap() |> is_coming_before(&1))
       true
       ...> is_locator(true)
       false

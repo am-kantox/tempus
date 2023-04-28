@@ -253,8 +253,8 @@ defmodule Tempus.Slots.List do
   Splits the slots by the pivot given as a `t:Slot.t` or as a function.
   """
   @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
-  def split(slots, origin, options \\ []) when is_locator(origin) do
-    {tail, reversed_head} = do_split_until(slots, origin, Keyword.get(options, :adjustment, 0))
+  def split(slots, pivot, options \\ []) when is_locator(pivot) do
+    {tail, reversed_head} = do_split_until(slots, pivot, Keyword.get(options, :adjustment, 0))
     {Enum.reverse(reversed_head), tail}
   end
 
@@ -265,14 +265,14 @@ defmodule Tempus.Slots.List do
   defp do_split_until(%Slots.List{slots: slots}, origin, adjustment) when is_origin(origin),
     do: do_previous(slots, Slot.wrap(origin), -adjustment, [])
 
-  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment)
-       when is_function(origin, 1) and adjustment >= 0,
-       do: do_next(slots, origin, adjustment, [])
+  defp do_split_until(%Slots.List{slots: slots}, locator, adjustment)
+       when is_function(locator, 1) and adjustment >= 0,
+       do: do_next(slots, locator, adjustment, [])
 
-  defp do_split_until(%Slots.List{slots: slots}, origin, adjustment) when is_function(origin, 1),
-    do: do_previous(slots, origin, -adjustment, [])
+  defp do_split_until(%Slots.List{slots: slots}, locator, adjustment) when is_function(locator, 1),
+    do: do_previous(slots, locator, -adjustment, [])
 
-  defp do_next([], _origin, _count, acc), do: {[], acc}
+  defp do_next([], _pivot, _count, acc), do: {[], acc}
 
   defp do_next([%Slot{} = head | _] = list, %Slot{} = origin, count, acc)
        when not is_coming_before(head, origin),
@@ -333,6 +333,7 @@ defmodule Tempus.Slots.List do
       "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
     )
   end
+
   defp do_previous(slots, _origin, _count, acc), do: {Enum.reverse(acc) ++ slots, []}
 
   defimpl Enumerable do
@@ -362,8 +363,8 @@ defmodule Tempus.Slots.List do
     def add(%Slots.List{} = slots, slot, options \\ []) when is_origin(slot),
       do: Slots.List.add(slots, slot, options)
 
-    def split(slots, origin, options \\ []) when is_locator(origin) do
-      {head, tail} = Slots.List.split(slots, origin, options)
+    def split(slots, pivot, options \\ []) when is_locator(pivot) do
+      {head, tail} = Slots.List.split(slots, pivot, options)
       {:ok, %Slots.List{slots: head}, %Slots.List{slots: tail}}
     end
 

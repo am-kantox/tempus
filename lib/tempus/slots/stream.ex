@@ -29,6 +29,8 @@ defmodule Tempus.Slots.Stream do
 
   @type t :: Slots.t(Slots.Stream)
 
+  @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
+
   @doc false
   defmacro slots do
     case __CALLER__.context do
@@ -343,10 +345,64 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
+  @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
+  def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
+    do_split_until(slots, pivot, Keyword.get(options, :adjustment, 0))
+  end
+
+  defmacrop match_chunk(count) do
+    underscores = List.duplicate({:_, [], nil}, count + 1)
+
+    quote do: [unquote_splicing(underscores), var!(slot)]
+  end
+
+  def do_split_until(%Slots.Stream{} = stream, pivot, adjustment) when is_origin(pivot) do
+    do_split_until(stream, pivot |> Slot.wrap() |> to_locator(), adjustment)
+  end
+
+  def do_split_until(%Slots.Stream{slots: stream}, locator, adjustment) when adjustment >= 0 do
+    tail = Stream.drop_while(stream, locator)
+
+    head =
+      stream
+      |> Stream.take_while(locator)
+      |> Stream.concat(Stream.take(tail, adjustment))
+
+    tail = Stream.drop(tail, adjustment)
+
+    {head, tail}
+  end
+
+  def do_split_until(slots, locator, adjustment), do: do_previous(slots, locator, -adjustment - 1)
+
+  Enum.each(0..@lookbehinds, fn count ->
+    defp do_previous(%Slots.Stream{slots: stream}, locator, unquote(count)) do
+      stream = Stream.chunk_every(stream, unquote(count) + 2, 1, :discard)
+      reducer = fn match_chunk(unquote(count)) -> locator.(slot) end
+
+      head = Stream.take_while(stream, reducer)
+      tail = Stream.drop_while(stream, reducer)
+
+      [head, tail]
+      |> Enum.map(fn stream ->
+        Stream.flat_map(stream, fn
+          [result | _] -> [result]
+          _ -> []
+        end)
+      end)
+      |> List.to_tuple()
+    end
+  end)
+
+  defp do_previous(_slots, _origin, count) when count > @lookbehinds do
+    raise(
+      ArgumentError,
+      "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
+    )
+  end
+
   defimpl Enumerable do
     @moduledoc false
-
-    @compile :inline_list_funcs
 
     def reduce(%Slots.Stream{slots: function}, acc, fun) when is_function(function, 2),
       do: function.(acc, fun)
@@ -354,20 +410,13 @@ defmodule Tempus.Slots.Stream do
     def reduce(%Slots.Stream{slots: %Stream{} = stream}, acc, fun),
       do: Enumerable.reduce(stream, acc, fun)
 
-    def count(%Slots.List{slots: slots}), do: {:ok, length(slots)}
-    def member?(%Slots.List{}, %Slot{}), do: {:error, __MODULE__}
-    def slice(%Slots.List{}), do: {:error, __MODULE__}
+    def count(%Slots.Stream{}), do: {:error, __MODULE__}
+    def member?(%Slots.Stream{}, %Slot{}), do: {:error, __MODULE__}
+    def slice(%Slots.Stream{}), do: {:error, __MODULE__}
   end
 
   defimpl Slots.Group do
     @moduledoc false
-    @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
-
-    defmacrop match_chunk(count) do
-      underscores = List.duplicate({:_, [], nil}, count + 1)
-
-      quote do: [unquote_splicing(underscores), var!(slot)]
-    end
 
     def identity(%Slots.Stream{}), do: Slots.Stream.new()
 
@@ -385,48 +434,9 @@ defmodule Tempus.Slots.Stream do
 
     def add(%Slots.Stream{} = stream, slot, options), do: Slots.Stream.add(stream, slot, options)
 
-    def drop_until(slots, origin, options) do
-      adjustment = Keyword.get(options, :adjustment, 0)
-      do_drop_until(slots, origin, adjustment)
-    end
-
-    def do_drop_until(%Slots.Stream{slots: stream}, origin, adjustment) when adjustment >= 0 do
-      origin = Slot.wrap(origin)
-
-      tail =
-        stream
-        |> Stream.drop_while(&is_coming_before(&1, origin))
-        |> Stream.drop(adjustment)
-
-      {:ok, tail}
-    end
-
-    def do_drop_until(slots, origin, adjustment), do: do_previous(slots, origin, adjustment + 1)
-
-    Enum.each(0..@lookbehinds, fn count ->
-      defp do_previous(%Slots.Stream{slots: stream}, origin, unquote(count)) do
-        origin = Slot.wrap(origin)
-
-        tail =
-          stream
-          |> Stream.chunk_every(unquote(count) + 2, 1, :discard)
-          |> Stream.drop_while(
-            &match?(match_chunk(unquote(count)) when not is_coming_before(origin, slot), &1)
-          )
-          |> Stream.flat_map(fn
-            [result | _] -> [result]
-            _ -> []
-          end)
-
-        {:ok, tail}
-      end
-    end)
-
-    defp do_previous(_slots, _origin, count) when count > @lookbehinds do
-      raise(
-        ArgumentError,
-        "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
-      )
+    def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
+      {head, tail} = Slots.Stream.split(slots, pivot, options)
+      {:ok, %Slots.Stream{slots: head}, %Slots.Stream{slots: tail}}
     end
 
     def merge(%Slots.Stream{} = slots, other, options),

@@ -78,6 +78,14 @@ defmodule Tempus.Slots do
     end
   end
 
+  @spec drop_until(t(), locator(), keyword()) :: t()
+  def drop_until(%Slots{} = slots, pivot, options \\ []),
+    do: slots |> split(pivot, options) |> elem(1)
+
+  @spec take_until(t(), locator(), keyword()) :: t()
+  def take_until(%Slots{} = slots, pivot, options \\ []),
+    do: slots |> split(pivot, options) |> elem(0)
+
   @spec add(slots :: t(), slot :: Slot.origin()) :: t()
   @doc """
   Adds another slot to the slots collection.
