@@ -96,7 +96,9 @@ defmodule Tempus.Guards do
                    (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2))
 
   defguardp is_slot_coming_before(s1, s2)
-            when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
+            when not is_nil(:erlang.map_get(:to, s1)) and
+                   not is_nil(:erlang.map_get(:from, s2)) and
+                   is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
 
   defguardp is_datetime_covered(dt, dt1, dt2)
             when (is_nil(dt1) and not is_nil(dt2) and not is_datetime_coming_before(dt2, dt)) or
@@ -191,7 +193,9 @@ defmodule Tempus.Guards do
   defguard is_joint(s1, s2)
            when is_slot(s1) and is_slot(s2) and
                   (is_datetime_covered(:erlang.map_get(:from, s1), s2) or
-                     is_datetime_covered(:erlang.map_get(:to, s1), s2))
+                     is_datetime_covered(:erlang.map_get(:to, s1), s2) or
+                     is_datetime_covered(:erlang.map_get(:from, s2), s1) or
+                     is_datetime_covered(:erlang.map_get(:to, s2), s1))
 
   @doc """
   Guard to validate the slot covers the origin passed as the first argument

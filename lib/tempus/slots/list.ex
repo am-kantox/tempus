@@ -254,8 +254,22 @@ defmodule Tempus.Slots.List do
   """
   @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
   def split(slots, pivot, options \\ []) when is_locator(pivot) do
-    {tail, reversed_head} = do_split_until(slots, pivot, Keyword.get(options, :adjustment, 0))
-    {Enum.reverse(reversed_head), tail}
+    greedy? = Keyword.get(options, :greedy, true)
+    adjustment = Keyword.get(options, :adjustment, 0)
+
+    {tail, reversed_head} = do_split_until(slots, pivot, adjustment)
+    head = Enum.reverse(reversed_head)
+
+    case {greedy?, pivot} do
+      {true, origin} when is_origin(origin) ->
+        {head ++ Enum.take_while(tail, &is_joint(&1, Slot.wrap(origin))), tail}
+
+      {false, origin} when is_origin(origin) ->
+        {head, Enum.drop_while(tail, &is_joint(&1, Slot.wrap(origin)))}
+
+      _ ->
+        {head, tail}
+    end
   end
 
   defp do_split_until(%Slots.List{slots: slots}, origin, adjustment)
@@ -269,8 +283,9 @@ defmodule Tempus.Slots.List do
        when is_function(locator, 1) and adjustment >= 0,
        do: do_next(slots, locator, adjustment, [])
 
-  defp do_split_until(%Slots.List{slots: slots}, locator, adjustment) when is_function(locator, 1),
-    do: do_previous(slots, locator, -adjustment, [])
+  defp do_split_until(%Slots.List{slots: slots}, locator, adjustment)
+       when is_function(locator, 1),
+       do: do_previous(slots, locator, -adjustment, [])
 
   defp do_next([], _pivot, _count, acc), do: {[], acc}
 

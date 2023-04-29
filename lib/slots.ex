@@ -23,7 +23,6 @@ defmodule Tempus.Slots do
   alias Tempus.{Slot, Slots, Slots.Group}
 
   import Tempus.Guards
-  import Tempus.Slots.Normalizers
 
   @type container :: Enumerable.t(Slot.t())
   @opaque implementation(group) :: %{__struct__: group, slots: container()}
@@ -69,9 +68,8 @@ defmodule Tempus.Slots do
         {%Slots{slots: head}, %Slots{slots: tail}}
 
       {:error, _} ->
-        slots
-        |> Group.flatten(options)
-        |> Enum.split_with(to_locator(origin))
+        %Slots.List{slots: Group.flatten(slots, options)}
+        |> Slots.List.split(origin)
         |> Tuple.to_list()
         |> Enum.map(&wrap(&1, Keyword.put(options, :implementation, implementation)))
         |> List.to_tuple()

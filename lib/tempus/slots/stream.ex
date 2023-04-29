@@ -347,7 +347,21 @@ defmodule Tempus.Slots.Stream do
 
   @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
   def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
-    do_split_until(slots, pivot, Keyword.get(options, :adjustment, 0))
+    greedy? = Keyword.get(options, :greedy, true)
+    adjustment = Keyword.get(options, :adjustment, 0)
+
+    {head, tail} = do_split_until(slots, pivot, adjustment)
+
+    case {greedy?, pivot} do
+      {true, %Slot{} = origin} ->
+        {Stream.concat(head, Stream.take_while(tail, &is_joint(&1, origin))), tail}
+
+      {false, %Slot{} = origin} ->
+        {head, Stream.drop_while(tail, &is_joint(&1, origin))}
+
+      _ ->
+        {head, tail}
+    end
   end
 
   defmacrop match_chunk(count) do
