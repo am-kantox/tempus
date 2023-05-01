@@ -307,6 +307,7 @@ defmodule Tempus do
     do: days_add(slots, origin: origin, count: count, direction: :bwd)
 
   @spec next_busy(Slots.t(), options()) :: [Slot.t()] | Slot.t() | nil | no_return
+  @doc deprecated: "Use `slice/3` instead"
   @doc """
   Returns the next **busy** slot from the slots passed as a first argument,
     that immediately follows `origin`. If slots are overlapped, the overlapped
@@ -346,15 +347,42 @@ defmodule Tempus do
 
   def next_busy(%Slots{} = slots, opts) do
     {origin, count, iterator} = options(opts)
+    do_next_busy(slots, origin, count, iterator)
+  end
 
+  defp do_next_busy(slots, origin, 0, 1) do
     slots
-    |> Slots.drop_until(origin, adjustment: count * iterator, greedy: true)
-    |> Enum.take(count + 1)
-    |> Enum.drop(count)
-    |> List.first()
+    |> Slots.drop_until(origin, greedy: true)
+    |> Enum.take(1)
+    |> List.last()
+  end
+
+  defp do_next_busy(slots, origin, 0, -1) do
+    slots
+    |> Slots.drop_until(origin, adjustment: -1, greedy: true)
+    |> Enum.take(2)
+    |> then(fn
+      [_, joint] when is_joint(joint, origin) -> joint
+      [slot | _] when is_coming_before(slot, origin) -> slot
+      _ -> nil
+    end)
+  end
+
+  defp do_next_busy(slots, origin, count, 1) do
+    slots
+    |> Slots.drop_until(origin, greedy: true)
+    |> Enum.take(count)
+  end
+
+  defp do_next_busy(slots, origin, count, -1) do
+    slots
+    |> Slots.drop_until(origin, adjustment: -count-1, greedy: true)
+    |> Enum.take(count)
+    |> dbg
   end
 
   @spec next_free(Slots.t(), options()) :: [Slot.t()] | Slot.t() | no_return
+  @doc deprecated: "Use `slice/3` instead"
   @doc """
   Returns the next **free** slot from the slots passed as a first argument,
     that immediately follows `origin`. If slots are overlapped, the overlapped
@@ -362,6 +390,7 @@ defmodule Tempus do
 
   ### Examples
 
+      iex> import Tempus.Sigils
       iex> slots = [
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
@@ -369,15 +398,15 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-14|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>
+      ~I[2020-08-08 00:00:00.000000Z → 2020-08-09 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-06 11:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      ~I[2020-08-06 11:00:00.000000Z → 2020-08-06 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~U|2020-08-13 01:00:00.000000Z|)
-      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
+      ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
-      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
+      ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-14|)
-      #Slot<[from: ~U[2020-08-15 00:00:00.000000Z], to: nil]>
+      ~I[2020-08-15 00:00:00.000000Z → ∞]>
       iex> Tempus.next_free(slots, origin: ~D|2020-08-07|, count: 5)
       [
         %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
@@ -408,11 +437,12 @@ defmodule Tempus do
 
     tail =
       slots
-      |> Slots.drop_until(origin, adjustment: count * iterator - 1, greedy: false)
-      |> Enum.take(count + 2)
+      |> Slots.drop_until(origin, adjustment: count * iterator - 1, greedy: true)
+      |> Enum.take(2)
 
     Slots.List.inverse(%Slots.List{slots: tail}).slots
-    |> Enum.slice(1, count + 1)
+    |> Enum.drop(1)
+    |> List.first()
   end
 
   @doc """
