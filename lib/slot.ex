@@ -537,6 +537,16 @@ defmodule Tempus.Slot do
     %Slot{from: DateTime.shift_zone!(from, tz, tz_db), to: DateTime.shift_zone!(to, tz, tz_db)}
   end
 
+  @spec gap([t()]) :: t() | nil
+  @doc false
+  def gap([%Slot{to: from} = prev, %Slot{from: to} = next]) when is_coming_before(prev, next),
+    do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
+
+  def gap([prev, next]) when is_coming_before(next, prev), do: gap([next, prev])
+  def gap([%Slot{from: nil, to: from}]), do: shift(%Slot{from: from, to: nil}, from: 1)
+  def gap([%Slot{from: to, to: nil}]), do: shift(%Slot{from: nil, to: to}, to: -1)
+  def gap(_), do: void()
+
   defimpl Inspect do
     @moduledoc false
 

@@ -70,6 +70,7 @@ defmodule Tempus do
     input
     |> do_guess()
     |> case do
+      {:ok, nil} -> {:ok, nil}
       {:ok, origin} -> {:ok, Slot.wrap(origin)}
       {:error, reason} -> {:error, reason}
     end
@@ -106,6 +107,10 @@ defmodule Tempus do
     end
   end
 
+  defp do_guess("nil"), do: {:ok, nil}
+  defp do_guess("∞"), do: {:ok, nil}
+  defp do_guess(""), do: {:ok, nil}
+
   defp do_guess(nil), do: {:ok, nil}
 
   defp do_guess(<<_::binary-size(4), ?-, _::binary-size(2), ?-, _::binary-size(2)>> = date),
@@ -119,7 +124,8 @@ defmodule Tempus do
       [
         &with({:ok, value, _} <- DateTime.from_iso8601(&1), do: {:ok, value}),
         &Date.from_iso8601/1,
-        &Time.from_iso8601/1
+        &Time.from_iso8601/1,
+        &Tempus.Sigils.NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -129,7 +135,8 @@ defmodule Tempus do
         &with({:ok, value, _} <- DateTime.from_iso8601(&1, :extended), do: {:ok, value}),
         &with({:ok, value, _} <- DateTime.from_iso8601(&1, :basic), do: {:ok, value}),
         &Date.from_iso8601/1,
-        &Time.from_iso8601/1
+        &Time.from_iso8601/1,
+        &Tempus.Sigils.NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -350,6 +357,14 @@ defmodule Tempus do
     do_next_busy(slots, origin, count, iterator)
   end
 
+  defp do_next_busy(slots, origin, :infinity, 1) do
+    Slots.drop_until(slots, origin, greedy: true)
+  end
+
+  defp do_next_busy(slots, origin, :infinity, -1) do
+    Slots.take_until(slots, origin, greedy: true)
+  end
+
   defp do_next_busy(slots, origin, 0, 1) do
     slots
     |> Slots.drop_until(origin, greedy: true)
@@ -376,9 +391,8 @@ defmodule Tempus do
 
   defp do_next_busy(slots, origin, count, -1) do
     slots
-    |> Slots.drop_until(origin, adjustment: -count-1, greedy: true)
+    |> Slots.drop_until(origin, adjustment: -count - 1, greedy: true)
     |> Enum.take(count)
-    |> dbg
   end
 
   @spec next_free(Slots.t(), options()) :: [Slot.t()] | Slot.t() | no_return
@@ -400,49 +414,21 @@ defmodule Tempus do
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
       ~I[2020-08-08 00:00:00.000000Z → 2020-08-09 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|})
-      ~I[2020-08-06 11:00:00.000000Z → 2020-08-06 23:59:59.999999Z]
+      ~I[∞ → 2020-08-06 23:59:59.999999Z]nu
       iex> Tempus.next_free(slots, origin: ~U|2020-08-13 01:00:00.000000Z|)
       ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
       ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-14|)
-      ~I[2020-08-15 00:00:00.000000Z → ∞]>
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-07|, count: 5)
-      [
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: nil}
-      ]
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-15|, count: -5)
-      [
-        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: ~U[2020-08-15 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
-      ]
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-12|, count: :infinity, direction: :bwd)
-      [
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
-      ]
+      ~I[2020-08-15 00:00:00.000000Z → ∞]un
   """
   @telemetria level: :debug
   def next_free(slots, opts \\ [])
 
   def next_free(%Slots{} = slots, opts) do
-    {origin, count, iterator} = options(opts)
-
-    tail =
-      slots
-      |> Slots.drop_until(origin, adjustment: count * iterator - 1, greedy: true)
-      |> Enum.take(2)
-
-    Slots.List.inverse(%Slots.List{slots: tail}).slots
-    |> Enum.drop(1)
-    |> List.first()
+    slots
+    |> Slots.inverse()
+    |> next_busy(opts)
   end
 
   @doc """

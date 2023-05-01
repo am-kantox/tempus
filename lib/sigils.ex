@@ -3,6 +3,14 @@ defmodule Tempus.Sigils do
 
   alias Tempus.Slot
 
+  defmodule NilParser do
+    @moduledoc false
+
+    def from_iso8601("nil"), do: {:ok, nil}
+    def from_iso8601("∞"), do: {:ok, nil}
+    def from_iso8601(_other), do: {:error, :not_a_nil}
+  end
+
   @doc ~S"""
   Handles the sigil `~I` for `Tempus.Slot`.
   It returns a slot without interpolations and without escape
@@ -40,14 +48,15 @@ defmodule Tempus.Sigils do
       ?d -> Date
       ?t -> Time
       ?u -> DateTime
+      ?n -> NilParser
     end
 
     from_iso =
       modifiers
       |> case do
         [] -> [DateTime, DateTime]
-        [ft] when ft in ~c"dtu" -> List.duplicate(by_mod.(ft), 2)
-        [f, t] = mods when f in ~c"dtu" and t in ~c"dtu" -> Enum.map(mods, by_mod)
+        [ft] when ft in ~c"dtun" -> List.duplicate(by_mod.(ft), 2)
+        [f, t] = mods when f in ~c"dtun" and t in ~c"dtun" -> Enum.map(mods, by_mod)
       end
       |> Enum.map(&Function.capture(&1, :from_iso8601, 1))
 
@@ -86,6 +95,9 @@ defmodule Tempus.Sigils do
       |> Enum.zip(from_iso)
       |> Enum.map(fn {value, mapper} ->
         case mapper.(value) do
+          {:ok, nil} ->
+            nil
+
           {:ok, result} ->
             Slot.wrap(result)
 
@@ -99,7 +111,11 @@ defmodule Tempus.Sigils do
               description: "`~I` sigil input is malformed, error: " <> inspect(error)
         end
       end)
-      |> Slot.join()
+      |> case do
+        [nil, %Slot{to: to}] -> %Slot{from: nil, to: to}
+        [%Slot{from: from}, nil] -> %Slot{from: from, to: nil}
+        slots -> Slot.join(slots)
+      end
       |> Macro.escape()
 
     quote(generated: true, location: :keep, do: unquote(result))

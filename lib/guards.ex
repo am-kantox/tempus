@@ -92,26 +92,29 @@ defmodule Tempus.Guards do
                          )))
 
   defguardp is_datetime_coming_before(dt1, dt2)
-            when is_date_coming_before(dt1, dt2) or
-                   (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2))
+            when is_datetime(dt1) and is_datetime(dt2) and
+                   (is_date_coming_before(dt1, dt2) or
+                      (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))
 
   defguardp is_slot_coming_before(s1, s2)
-            when not is_nil(:erlang.map_get(:to, s1)) and
-                   not is_nil(:erlang.map_get(:from, s2)) and
+            when is_datetime(:erlang.map_get(:to, s1)) and
+                   is_datetime(:erlang.map_get(:from, s2)) and
                    is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
 
-  defguardp is_datetime_covered(dt, dt1, dt2)
-            when (is_nil(dt1) and not is_nil(dt2) and not is_datetime_coming_before(dt2, dt)) or
-                   (is_nil(dt2) and not is_nil(dt1) and not is_datetime_coming_before(dt, dt1)) or
-                   (not is_nil(dt1) and not is_nil(dt2) and
+  defguardp is_datetime_between(dt, dt1, dt2)
+            when (is_nil(dt1) and is_datetime(dt2) and not is_datetime_coming_before(dt2, dt)) or
+                   (is_nil(dt2) and is_datetime(dt1) and not is_datetime_coming_before(dt, dt1)) or
+                   (is_datetime(dt1) and is_datetime(dt2) and
                       not is_datetime_coming_before(dt, dt1) and
                       not is_datetime_coming_before(dt2, dt))
 
   defguardp is_datetime_covered(dt, s)
-            when is_datetime_covered(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
+            when is_slot(s) and
+                   is_datetime_between(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
 
   defguardp is_slot_covered(s1, s2)
-            when is_datetime_covered(:erlang.map_get(:from, s1), s2) and
+            when is_slot(s1) and is_slot(s2) and
+                   is_datetime_covered(:erlang.map_get(:from, s1), s2) and
                    is_datetime_covered(:erlang.map_get(:to, s1), s2)
 
   defguardp is_slot_from_equal(s, dt)
