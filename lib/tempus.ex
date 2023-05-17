@@ -391,7 +391,8 @@ defmodule Tempus do
 
   defp do_next_busy(slots, origin, count, -1) do
     slots
-    |> Slots.drop_until(origin, adjustment: -count - 1, greedy: true)
+    |> Slots.drop_until(origin, adjustment: -count + 1, greedy: true)
+    # |> Slots.take_while(count)
     |> Enum.take(count)
   end
 
@@ -458,50 +459,72 @@ defmodule Tempus do
   def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
     amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
-    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
-
-    [%Slot{slot | from: origin} | slots]
+    slots
+    |> next_free(origin: origin, count: :infinity, direction: :fwd)
     |> Enum.reduce_while({origin, amount_in_microseconds}, fn
-      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
-        maybe_result = DateTime.add(slot.from, rest_to_add_in_microseconds, :microsecond)
+      %Slot{from: from, to: to}, {dt, ms} ->
+        from = [from, dt] |> Enum.reject(&is_nil/1) |> Enum.max(DateTime)
 
-        if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
-          do: {:halt, maybe_result},
-          else:
-            {:cont,
-             {maybe_result, rest_to_add_in_microseconds - Slot.duration(slot, :microsecond)}}
+        if is_nil(to) or
+             Slot.duration(%Slot{from: from, to: to}, :microsecond) > ms do
+          {:halt, DateTime.add(from, ms, :microsecond)}
+        else
+          {:cont, {to, ms - Slot.duration(%Slot{from: from, to: to}, :microsecond)}}
+        end
     end)
     |> case do
       %DateTime{} = result ->
         DateTime.truncate(result, unit)
 
-      {%DateTime{} = result, rest} when is_integer(rest) ->
-        DateTime.add(result, rest, :microsecond)
+      {dt, rest} when is_integer(rest) ->
+        DateTime.add(dt, rest, :microsecond)
     end
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
-    amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
+    amount_in_microseconds = System.convert_time_unit(-amount_to_add, unit, :microsecond)
 
-    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :bwd)
+    slots
+    |> Slots.inverse()
+    |> Enum.reduce_while([], fn
+      %Slot{from: nil} = slot, [] ->
+        {:cont, [slot]}
 
-    [%Slot{slot | to: origin} | slots]
-    |> Enum.reduce_while({origin, amount_in_microseconds}, fn
-      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
-        maybe_result = DateTime.add(slot.to, rest_to_add_in_microseconds, :microsecond)
+      %Slot{from: from} = _slot, _collected when is_coming_before(origin, from) ->
+        {:halt, nil}
 
-        if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
-          do: {:halt, maybe_result},
-          else:
-            {:cont,
-             {maybe_result, rest_to_add_in_microseconds + Slot.duration(slot, :microsecond)}}
+      %Slot{to: to} = slot, collected when is_coming_before(to, origin) ->
+        collected =
+          [slot | collected]
+          |> Enum.reduce_while({[], 0}, fn
+            _slot, {collected, ms} when ms >= amount_in_microseconds ->
+              {:halt, {collected, ms}}
+
+            slot, {collected, ms} ->
+              {:cont, {[slot | collected], ms + Slot.duration(slot, :microsecond)}}
+          end)
+          |> elem(0)
+          |> Enum.reverse()
+
+        {:cont, collected}
+
+      %Slot{from: from}, collected ->
+        slot = %Slot{from: from, to: origin}
+
+        result =
+          Enum.reduce_while([slot | collected], amount_in_microseconds, fn %Slot{} = slot, ms ->
+            duration = Slot.duration(slot, :microsecond)
+
+            if duration < ms,
+              do: {:cont, ms - duration},
+              else: {:halt, DateTime.add(slot.to, -ms, :microsecond)}
+          end)
+
+        {:halt, result}
     end)
     |> case do
-      %DateTime{} = result ->
-        DateTime.truncate(result, unit)
-
-      {%DateTime{} = result, rest} when is_integer(rest) ->
-        DateTime.add(result, rest, :microsecond)
+      %DateTime{} = dt -> DateTime.truncate(dt, unit)
+      [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end
   end
 

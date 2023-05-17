@@ -84,6 +84,35 @@ defmodule Tempus.Slots do
   def take_until(%Slots{} = slots, pivot, options \\ []),
     do: slots |> split(pivot, options) |> elem(0)
 
+  @spec span(t() | [Slot.t()], non_neg_integer(), unit :: System.time_unit()) :: Enumerable.t()
+  def span(slots, duration, unit \\ :second) do
+    duration_in_microseconds = System.convert_time_unit(duration, unit, :microsecond)
+
+    slots
+    |> Enum.reduce_while({[], duration_in_microseconds}, fn
+      %Slot{from: nil} = slot, {[], _ms} ->
+        {:halt, [slot]}
+
+      %Slot{from: from, to: nil}, {slots, ms} ->
+        {:halt,
+         Enum.reverse([%Slot{from: from, to: DateTime.add(from, ms, :microsecond)} | slots])}
+
+      %Slot{from: from} = slot, {slots, ms} ->
+        duration = Slot.duration(slot, :microsecond)
+
+        if duration < ms do
+          {:cont, {[slot | slots], ms - duration}}
+        else
+          {:halt,
+           Enum.reverse([%Slot{from: from, to: DateTime.add(from, ms, :microsecond)} | slots])}
+        end
+    end)
+    |> case do
+      {slots, _duration} -> slots
+      slots -> slots
+    end
+  end
+
   @spec add(slots :: t(), slot :: Slot.origin()) :: t()
   @doc """
   Adds another slot to the slots collection.

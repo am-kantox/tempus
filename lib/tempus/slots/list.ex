@@ -345,7 +345,7 @@ defmodule Tempus.Slots.List do
   defp do_previous(_slots, _origin, count, _acc) when count > @lookbehinds do
     raise(
       ArgumentError,
-      "Lookbehinds to more than #{@lookbehinds} slots are not supported, chain requests instead"
+      "Lookbehinds to more than #{@lookbehinds} slots are not supported (#{count} requested), chain requests instead"
     )
   end
 
