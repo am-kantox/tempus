@@ -4,7 +4,8 @@ defmodule Tempus.Slots.Normalizers do
   alias Tempus.{Slot, Slots}
   import Tempus.Guards, only: [is_coming_before: 2]
 
-  @spec pop_jid([{:join, nil | boolean() | integer} | keyword()]) :: non_neg_integer()
+  @spec pop_jid([{:join, nil | boolean() | non_neg_integer()} | keyword()]) ::
+          nil | non_neg_integer()
   def pop_jid(options) do
     case Keyword.get(options, :join, false) do
       true -> 1

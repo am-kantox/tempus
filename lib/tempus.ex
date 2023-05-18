@@ -12,7 +12,7 @@ defmodule Tempus do
 
   use Tempus.Telemetria
 
-  alias Tempus.{Slot, Slots}
+  alias Tempus.{Sigils.NilParser, Slot, Slots}
 
   import Tempus.Guards
 
@@ -125,7 +125,7 @@ defmodule Tempus do
         &with({:ok, value, _} <- DateTime.from_iso8601(&1), do: {:ok, value}),
         &Date.from_iso8601/1,
         &Time.from_iso8601/1,
-        &Tempus.Sigils.NilParser.from_iso8601/1
+        &NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -136,7 +136,7 @@ defmodule Tempus do
         &with({:ok, value, _} <- DateTime.from_iso8601(&1, :basic), do: {:ok, value}),
         &Date.from_iso8601/1,
         &Time.from_iso8601/1,
-        &Tempus.Sigils.NilParser.from_iso8601/1
+        &NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -220,7 +220,7 @@ defmodule Tempus do
     |> slice(nil, to, type)
   end
 
-  @spec drop_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @spec drop_while(slots :: Slots.t(), fun :: (Slot.t() -> boolean())) :: Slots.t()
   @doc since: "0.7.0"
   @doc """
   Drops slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
@@ -229,7 +229,7 @@ defmodule Tempus do
     Slots.drop_until(slots, &(not fun.(&1)))
   end
 
-  @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> boolean())) :: Slots.t()
   @doc since: "0.7.0"
   @doc """
   Takes slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.

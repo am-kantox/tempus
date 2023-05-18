@@ -25,7 +25,7 @@ defmodule Tempus.Slots.List do
   import Tempus.Slot, only: [void: 0]
   import Tempus.Slots.Normalizers
 
-  @type t :: Slots.t(Slots.List)
+  @type t :: Slots.implementation(Slots.List, [Slot.t()])
 
   @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
 
@@ -60,7 +60,7 @@ defmodule Tempus.Slots.List do
         %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
         %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}
   """
-  @spec add(t(), Slot.t(), keyword()) :: t()
+  @spec add(t(), Slot.origin(), keyword()) :: t()
   @telemetria level: :debug
   def add(%Slots.List{slots: slots}, slot, options \\ []) do
     slots =
@@ -71,6 +71,7 @@ defmodule Tempus.Slots.List do
     %Slots.List{slots: slots}
   end
 
+  @spec do_add(nil | non_neg_integer(), Slot.t(), [Slot.t()], [Slot.t()]) :: [Slot.t()]
   defp do_add(_, slot, head, []), do: Enum.reverse([slot | head])
 
   defp do_add(nil, slot, head, [th | tail]) when is_coming_before(th, slot),
@@ -252,7 +253,7 @@ defmodule Tempus.Slots.List do
   @doc """
   Splits the slots by the pivot given as a `t:Slot.t` or as a function.
   """
-  @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
+  @spec split(t(), Slots.locator(), keyword()) :: {[Slot.t()], [Slot.t()]}
   def split(slots, pivot, options \\ []) when is_locator(pivot) do
     greedy? = Keyword.get(options, :greedy, true)
     adjustment = Keyword.get(options, :adjustment, 0)
@@ -272,6 +273,7 @@ defmodule Tempus.Slots.List do
     end
   end
 
+  @spec do_split_until(t(), Slots.locator(), non_neg_integer()) :: {[Slot.t()], [Slot.t()]}
   defp do_split_until(%Slots.List{slots: slots}, origin, adjustment)
        when is_origin(origin) and adjustment >= 0,
        do: do_next(slots, Slot.wrap(origin), adjustment, [])

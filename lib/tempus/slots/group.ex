@@ -3,7 +3,7 @@ defprotocol Tempus.Slots.Group do
   The protocol to implement for the ordered collection of slots.
   """
 
-  alias Tempus.Slot
+  alias Tempus.{Slot, Slots}
 
   @doc """
   The function returning the identity element, which can be merged into

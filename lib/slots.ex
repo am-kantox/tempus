@@ -25,9 +25,17 @@ defmodule Tempus.Slots do
   import Tempus.Guards
 
   @type container :: Enumerable.t(Slot.t())
-  @opaque implementation(group) :: %{__struct__: group, slots: container()}
-  @type t(group) :: %Slots{slots: implementation(group)}
-  @type t :: t(Slots.List)
+  @type implementation(group, exact_implementation) :: %{
+          __struct__: group,
+          slots: exact_implementation
+        }
+  @type implementation(group) :: implementation(group, container())
+  @type t(group, exact_implementation) :: %{
+          __struct__: Slots,
+          slots: implementation(group, exact_implementation)
+        }
+  @type t(group) :: t(group, implementation(group))
+  @type t :: t(module())
   @typedoc "The type to use in navigation and/or rewinding slots enumerables"
   @type locator :: Slot.origin() | (Slot.t() -> boolean())
 

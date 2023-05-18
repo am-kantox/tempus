@@ -27,7 +27,7 @@ defmodule Tempus.Slots.Stream do
 
   defstruct slots: nil
 
-  @type t :: Slots.t(Slots.Stream)
+  @type t :: Slots.implementation(Slots.Stream)
 
   @lookbehinds Application.compile_env(:tempus, :lookbehinds, 12)
 
@@ -185,7 +185,7 @@ defmodule Tempus.Slots.Stream do
       slot, [] ->
         {[slot], []}
 
-      slot, [h | _] = list when is_coming_before(slot, h) and jid == false ->
+      slot, [h | _] = list when is_coming_before(slot, h) and is_nil(jid) ->
         {[slot], list}
 
       slot, list ->
