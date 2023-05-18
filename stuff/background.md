@@ -1,6 +1,6 @@
 # Mathematical Background
 
-## Terminology 𝕋𝕥
+## 𝕋erminology
 
 The pair of two elements is called a `Slot` if the following conditions are met
 

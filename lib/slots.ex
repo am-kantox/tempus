@@ -296,7 +296,7 @@ defmodule Tempus.Slots do
     import Inspect.Algebra
 
     def inspect(%Tempus.Slots{slots: slots}, opts) do
-      concat(["#Slots<", to_doc(slots, opts), ">"])
+      concat(["#𝕋<", to_doc(slots, opts), ">"])
     end
   end
 end

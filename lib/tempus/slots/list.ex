@@ -430,7 +430,7 @@ defmodule Tempus.Slots.List do
             slots
         end
 
-      concat(["𝕋ˡ<", to_doc(inner_doc, opts), ">"])
+      concat(["𝕥ˡ<", to_doc(inner_doc, opts), ">"])
     end
   end
 end

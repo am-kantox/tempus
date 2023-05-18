@@ -481,7 +481,7 @@ defmodule Tempus.Slots.Stream do
     import Inspect.Algebra
 
     def inspect(%Tempus.Slots.Stream{slots: slots}, opts) do
-      concat(["𝕋ˢ<", to_doc(slots, opts), ">"])
+      concat(["𝕥ˢ<", to_doc(slots, opts), ">"])
     end
   end
 end
