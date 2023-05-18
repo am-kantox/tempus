@@ -345,7 +345,7 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
-  @spec split(t(), Slots.locator(), keyword()) :: {t(), t()}
+  @spec split(t(), Slots.locator(), keyword()) :: {Enumerable.t(Slot.t()), Enumerable.t(Slot.t())}
   def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
     greedy? = Keyword.get(options, :greedy, true)
     adjustment = Keyword.get(options, :adjustment, 0)
