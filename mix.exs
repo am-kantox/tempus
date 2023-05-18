@@ -9,7 +9,7 @@ defmodule Tempus.MixProject do
       app: @app,
       version: @version,
       name: "Tempus",
-      elixir: "~> 1.9",
+      elixir: "~> 1.14",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
       consolidate_protocols: Mix.env() not in [:dev, :test],
@@ -87,10 +87,11 @@ defmodule Tempus.MixProject do
       logo: "stuff/#{@app}-48x48.png",
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: "stuff/images",
-      extras: ~w[README.md stuff/getting-started.md],
+      extras: ~w[README.md stuff/background.md stuff/getting-started.md],
       groups_for_modules: [
         Helpers: [Tempus.Guards, Tempus.Sigils],
-        Slots: [Tempus.Slot, Tempus.Slots]
+        Core: [Tempus.Slot, Tempus.Slots],
+        Implementations: [Tempus.Slots.List, Tempus.Slots.Stream]
       ]
     ]
   end

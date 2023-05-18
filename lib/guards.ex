@@ -25,6 +25,24 @@ defmodule Tempus.Guards do
                   (is_map(term) and is_map_key(term, :__struct__) and
                      :erlang.map_get(:__struct__, term) in [Date, DateTime, Time, Slot])
 
+  @doc """
+  Guard to validate that the term given is actually a `t:Tempus.Slot.origin/0` _or_
+    a function which might be used as a slot locator.
+
+  ## Examples
+
+      iex> import Tempus.Guards, only: [is_locator: 1, is_coming_before: 2]
+      ...> is_locator(Date.utc_today())
+      true
+      ...> is_locator(& Date.utc_today() |> Tempus.Slot.wrap() |> is_coming_before(&1))
+      true
+      ...> is_locator(true)
+      false
+  """
+  @spec is_locator(Slot.origin() | (Slot.t() -> boolean()) | any()) :: boolean()
+  defguard is_locator(origin)
+           when is_origin(origin) or is_function(origin, 1)
+
   defguardp is_date(term) when is_struct(term, Date)
   # defguardp is_time(term) when is_struct(term, Time)
   defguardp is_datetime(term) when is_struct(term, DateTime)
@@ -74,24 +92,29 @@ defmodule Tempus.Guards do
                          )))
 
   defguardp is_datetime_coming_before(dt1, dt2)
-            when is_date_coming_before(dt1, dt2) or
-                   (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2))
+            when is_datetime(dt1) and is_datetime(dt2) and
+                   (is_date_coming_before(dt1, dt2) or
+                      (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))
 
   defguardp is_slot_coming_before(s1, s2)
-            when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
+            when is_datetime(:erlang.map_get(:to, s1)) and
+                   is_datetime(:erlang.map_get(:from, s2)) and
+                   is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
 
-  defguardp is_datetime_covered(dt, dt1, dt2)
-            when (is_nil(dt1) and not is_nil(dt2) and not is_datetime_coming_before(dt2, dt)) or
-                   (is_nil(dt2) and not is_nil(dt1) and not is_datetime_coming_before(dt, dt1)) or
-                   (not is_nil(dt1) and not is_nil(dt2) and
+  defguardp is_datetime_between(dt, dt1, dt2)
+            when (is_nil(dt1) and is_datetime(dt2) and not is_datetime_coming_before(dt2, dt)) or
+                   (is_nil(dt2) and is_datetime(dt1) and not is_datetime_coming_before(dt, dt1)) or
+                   (is_datetime(dt1) and is_datetime(dt2) and
                       not is_datetime_coming_before(dt, dt1) and
                       not is_datetime_coming_before(dt2, dt))
 
   defguardp is_datetime_covered(dt, s)
-            when is_datetime_covered(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
+            when is_slot(s) and
+                   is_datetime_between(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
 
   defguardp is_slot_covered(s1, s2)
-            when is_datetime_covered(:erlang.map_get(:from, s1), s2) and
+            when is_slot(s1) and is_slot(s2) and
+                   is_datetime_covered(:erlang.map_get(:from, s1), s2) and
                    is_datetime_covered(:erlang.map_get(:to, s1), s2)
 
   defguardp is_slot_from_equal(s, dt)
@@ -173,7 +196,9 @@ defmodule Tempus.Guards do
   defguard is_joint(s1, s2)
            when is_slot(s1) and is_slot(s2) and
                   (is_datetime_covered(:erlang.map_get(:from, s1), s2) or
-                     is_datetime_covered(:erlang.map_get(:to, s1), s2))
+                     is_datetime_covered(:erlang.map_get(:to, s1), s2) or
+                     is_datetime_covered(:erlang.map_get(:from, s2), s1) or
+                     is_datetime_covered(:erlang.map_get(:to, s2), s1))
 
   @doc """
   Guard to validate the slot covers the origin passed as the first argument
@@ -226,7 +251,7 @@ defmodule Tempus.Guards do
   @spec joint_in_delta?(
           Slot.t(),
           Slot.t(),
-          non_neg_integer() | {non_neg_integer(), non_neg_integer()}
+          non_neg_integer() | [{System.time_unit(), non_neg_integer()}]
         ) :: boolean()
   @doc """
   Helper to validate one slot overlaps another in delta. Unlike guards,
@@ -243,7 +268,7 @@ defmodule Tempus.Guards do
       true
       ...> joint_in_delta?(s2, s1, 1)
       true
-      ...> joint_in_delta?(s1, s2, {0, 500})
+      ...> joint_in_delta?(s1, s2, microsecond: 500)
       false
   """
   def joint_in_delta?(s1, s2, _delta) when is_joint(s1, s2), do: true
@@ -252,14 +277,9 @@ defmodule Tempus.Guards do
     joint_in_delta?(s2, s1, delta)
   end
 
-  def joint_in_delta?(s1, s2, {delta_secs, delta_msecs})
-      when is_coming_before(s1, s2) do
-    {secs_from, msecs_from} = DateTime.to_gregorian_seconds(s2.from)
-    {secs_to, msecs_to} = DateTime.to_gregorian_seconds(s1.to)
-    1_000_000 * (secs_to - secs_from - delta_secs) + msecs_to - msecs_from - delta_msecs >= 0
-  end
+  def joint_in_delta?(s1, s2, [{unit, delta}])
+      when is_coming_before(s1, s2),
+      do: abs(DateTime.diff(s1.to, s2.from, unit)) <= delta
 
-  def joint_in_delta?(s1, s2, delta) when is_coming_before(s1, s2) do
-    joint_in_delta?(s1, s2, {delta, 0})
-  end
+  def joint_in_delta?(s1, s2, delta_seconds), do: joint_in_delta?(s1, s2, second: delta_seconds)
 end

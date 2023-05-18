@@ -10,9 +10,11 @@ defmodule Tempus do
     five days or subtracting 7 hours 30 minutes from now, considering busy slots.
   """
 
-  use Tempus.Telemetria, action: :import
+  use Tempus.Telemetria
 
-  alias Tempus.{Slot, Slots}
+  alias Tempus.{Sigils.NilParser, Slot, Slots}
+
+  import Tempus.Guards
 
   @typedoc "Direction for slots navigation"
   @type direction :: :fwd | :bwd
@@ -38,13 +40,12 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
       ...>   Tempus.Slot.wrap(~D|2020-08-12|)
       ...> ] |> Tempus.slots()
-      %Tempus.Slots{
-        slots: [
+      %Tempus.Slots{slots: %Tempus.Slots.List{slots: [
           %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]},
           %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
-          %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-12 23:59:59.999999Z]}]}
+          %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-12 23:59:59.999999Z]}]}}
   """
-  def slots(enum), do: Enum.into(enum, %Slots{})
+  defdelegate slots(enum), to: Slots, as: :wrap
 
   @doc """
   Helper to instantiate slot from any known format, by wrapping the argument.
@@ -69,6 +70,7 @@ defmodule Tempus do
     input
     |> do_guess()
     |> case do
+      {:ok, nil} -> {:ok, nil}
       {:ok, origin} -> {:ok, Slot.wrap(origin)}
       {:error, reason} -> {:error, reason}
     end
@@ -105,6 +107,10 @@ defmodule Tempus do
     end
   end
 
+  defp do_guess("nil"), do: {:ok, nil}
+  defp do_guess("∞"), do: {:ok, nil}
+  defp do_guess(""), do: {:ok, nil}
+
   defp do_guess(nil), do: {:ok, nil}
 
   defp do_guess(<<_::binary-size(4), ?-, _::binary-size(2), ?-, _::binary-size(2)>> = date),
@@ -118,7 +124,8 @@ defmodule Tempus do
       [
         &with({:ok, value, _} <- DateTime.from_iso8601(&1), do: {:ok, value}),
         &Date.from_iso8601/1,
-        &Time.from_iso8601/1
+        &Time.from_iso8601/1,
+        &NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -128,7 +135,8 @@ defmodule Tempus do
         &with({:ok, value, _} <- DateTime.from_iso8601(&1, :extended), do: {:ok, value}),
         &with({:ok, value, _} <- DateTime.from_iso8601(&1, :basic), do: {:ok, value}),
         &Date.from_iso8601/1,
-        &Time.from_iso8601/1
+        &Time.from_iso8601/1,
+        &NilParser.from_iso8601/1
       ]
       |> do_guess_reduce(input)
     end
@@ -147,8 +155,7 @@ defmodule Tempus do
     end)
   end
 
-  @spec free?(slots :: Slots.t(), slot :: Slot.origin(), method :: :smart | :size) ::
-          boolean() | no_return
+  @spec free?(slots :: Slots.t(), slot :: Slot.origin()) :: boolean()
   @doc """
   Checks whether the slot is disjoined against slots.
 
@@ -162,27 +169,23 @@ defmodule Tempus do
       false
       iex> Tempus.free?(slots, ~D|2020-08-08|)
       true
+      iex> Tempus.free?(slots, ~U|2020-08-09T23:59:59.999999Z|)
+      true
+      iex> Tempus.free?(slots, DateTime.add(~U|2020-08-09T23:59:59.999999Z|, 1, :microsecond))
+      false
   """
-  def free?(slots, slot, method \\ :smart)
+  def free?(%Slots{} = slots, origin) when is_origin(origin) do
+    origin = Slot.wrap(origin)
 
-  def free?(%Slots{slots: []}, _, _), do: true
-
-  def free?(%Slots{} = slots, %Slot{} = slot, :size),
-    do: Slots.size(Slots.add(slots, slot)) == Slots.size(slots) + 1
-
-  def free?(%Slots{slots: slots}, %Slot{} = origin, :smart) do
-    Enum.reduce_while(slots, true, fn
-      %Slot{} = current, true ->
-        case Slot.compare(current, origin, true) do
-          :gt -> {:halt, true}
-          :eq -> {:halt, false}
-          :joint -> {:halt, false}
-          :lt -> {:cont, true}
-        end
-    end)
+    slots
+    |> Slots.drop_until(origin)
+    |> Enum.take(1)
+    |> case do
+      [] -> true
+      [slot] when is_joint(slot, origin) -> false
+      _ -> true
+    end
   end
-
-  def free?(%Slots{} = slots, slot, method), do: free?(slots, Slot.wrap(slot), method)
 
   @typedoc """
   The type defining how slicing is to be applied.
@@ -192,8 +195,8 @@ defmodule Tempus do
   @type slice_type :: :greedy | :reluctant
   @spec slice(
           slots :: Slots.t(),
-          from :: Slot.origin(),
-          to :: Slot.origin(),
+          from :: Slots.locator(),
+          to :: Slots.locator(),
           type :: slice_type()
         ) :: Slots.t()
   @doc since: "0.7.0"
@@ -202,19 +205,14 @@ defmodule Tempus do
     (default: `:reluctant`.) Returns sliced `%Slots{}` back.
   """
   def slice(slots, from, to, type \\ :reluctant)
+
   def slice(slots, nil, nil, _), do: slots
 
-  def slice(slots, from, nil, :greedy),
-    do: drop_while(slots, &(Slot.compare(&1, from) == :lt))
+  def slice(slots, from, nil, type),
+    do: Slots.drop_until(slots, from, greedy: type == :greedy)
 
-  def slice(slots, from, nil, :reluctant),
-    do: drop_while(slots, &(Slot.compare(&1, from) != :gt))
-
-  def slice(slots, nil, to, :greedy),
-    do: take_while(slots, &(Slot.compare(&1, to) != :gt))
-
-  def slice(slots, nil, to, :reluctant),
-    do: take_while(slots, &(Slot.compare(&1, to) == :lt))
+  def slice(slots, nil, to, type),
+    do: Slots.take_until(slots, to, greedy: type == :greedy)
 
   def slice(slots, from, to, type) do
     slots
@@ -222,26 +220,22 @@ defmodule Tempus do
     |> slice(nil, to, type)
   end
 
-  @spec drop_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @spec drop_while(slots :: Slots.t(), fun :: (Slot.t() -> boolean())) :: Slots.t()
   @doc since: "0.7.0"
   @doc """
   Drops slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
   """
-  def drop_while(slots, fun) do
-    slots
-    |> Enum.drop_while(fun)
-    |> Slots.wrap_unsafe()
+  def drop_while(%Slots{slots: slots}, fun) do
+    Slots.drop_until(slots, &(not fun.(&1)))
   end
 
-  @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> as_boolean(term))) :: Slots.t()
+  @spec take_while(slots :: Slots.t(), fun :: (Slot.t() -> boolean())) :: Slots.t()
   @doc since: "0.7.0"
   @doc """
   Takes slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
   """
-  def take_while(slots, fun) do
-    slots
-    |> Enum.take_while(fun)
-    |> Slots.wrap_unsafe()
+  def take_while(%Slots{slots: slots}, fun) do
+    Slots.take_until(slots, &(not fun.(&1)))
   end
 
   @spec days_add(slots :: Slots.t(), opts :: options()) :: [Date.t()]
@@ -320,9 +314,10 @@ defmodule Tempus do
     do: days_add(slots, origin: origin, count: count, direction: :bwd)
 
   @spec next_busy(Slots.t(), options()) :: [Slot.t()] | Slot.t() | nil | no_return
+  @doc deprecated: "Use `slice/3` instead"
   @doc """
   Returns the next **busy** slot from the slots passed as a first argument,
-    that immediately follows `origin`. IOf slots are overlapped, the overlapped
+    that immediately follows `origin`. If slots are overlapped, the overlapped
     one gets returned.
 
   ### Examples
@@ -332,21 +327,21 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-07 12:00:00Z|}, count: 2) |> hd()
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-08 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-07 11:00:00Z|, to: ~U|2020-08-10 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-07|)
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-08|)
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-08|, direction: :bwd)
-      #Slot<[from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd)
-      #Slot<[from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-11 11:00:00Z|, to: ~U|2020-08-11 12:00:00Z|})
       nil
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|}, direction: :bwd)
@@ -357,25 +352,52 @@ defmodule Tempus do
   @telemetria level: :debug
   def next_busy(slots, opts \\ [])
 
-  def next_busy(%Slots{} = slots, opts),
-    do: do_next_busy(slots, options(opts))
+  def next_busy(%Slots{} = slots, opts) do
+    {origin, count, iterator} = options(opts)
+    do_next_busy(slots, origin, count, iterator)
+  end
 
-  def next_busy(%Slot{} = slot, opts),
-    do: next_busy(Slots.wrap(slot), opts)
+  defp do_next_busy(slots, origin, :infinity, 1) do
+    Slots.drop_until(slots, origin, greedy: true)
+  end
 
-  @spec do_next_busy(Slots.t(), options_tuple()) :: [Slot.t()]
-  defp do_next_busy(%Slots{} = slots, {origin, count, iterator}) when count >= 0 do
-    {slots, comparator} = if iterator == -1, do: {Enum.reverse(slots), :gt}, else: {slots, :lt}
+  defp do_next_busy(slots, origin, :infinity, -1) do
+    Slots.take_until(slots, origin, greedy: true)
+  end
 
+  defp do_next_busy(slots, origin, 0, 1) do
     slots
-    |> Enum.drop_while(fn
-      %Slot{} = slot -> Slot.strict_compare(slot, origin) == comparator
-      other -> raise Tempus.ArgumentError, expected: Tempus.Slot, passed: other
+    |> Slots.drop_until(origin, greedy: true)
+    |> Enum.take(1)
+    |> List.last()
+  end
+
+  defp do_next_busy(slots, origin, 0, -1) do
+    slots
+    |> Slots.drop_until(origin, adjustment: -1, greedy: true)
+    |> Enum.take(2)
+    |> then(fn
+      [_, joint] when is_joint(joint, origin) -> joint
+      [slot | _] when is_coming_before(slot, origin) -> slot
+      _ -> nil
     end)
-    |> wrap_result(count)
+  end
+
+  defp do_next_busy(slots, origin, count, 1) do
+    slots
+    |> Slots.drop_until(origin, greedy: true)
+    |> Enum.take(count)
+  end
+
+  defp do_next_busy(slots, origin, count, -1) do
+    slots
+    |> Slots.drop_until(origin, adjustment: -count + 1, greedy: true)
+    # |> Slots.take_while(count)
+    |> Enum.take(count)
   end
 
   @spec next_free(Slots.t(), options()) :: [Slot.t()] | Slot.t() | no_return
+  @doc deprecated: "Use `slice/3` instead"
   @doc """
   Returns the next **free** slot from the slots passed as a first argument,
     that immediately follows `origin`. If slots are overlapped, the overlapped
@@ -383,6 +405,7 @@ defmodule Tempus do
 
   ### Examples
 
+      iex> import Tempus.Sigils
       iex> slots = [
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
@@ -390,137 +413,23 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-14|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]]>
+      ~I[2020-08-08 00:00:00.000000Z → 2020-08-09 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|})
-      #Slot<[from: ~U[2020-08-06 11:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      ~I[∞ → 2020-08-06 23:59:59.999999Z]nu
       iex> Tempus.next_free(slots, origin: ~U|2020-08-13 01:00:00.000000Z|)
-      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
+      ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
-      #Slot<[from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]]>
+      ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-14|)
-      #Slot<[from: ~U[2020-08-15 00:00:00.000000Z], to: nil]>
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-07|, count: 5)
-      [
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: nil}
-      ]
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-15|, count: -5)
-      [
-        %Tempus.Slot{from: ~U[2020-08-15 00:00:00.000000Z], to: ~U[2020-08-15 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: ~U[2020-08-13 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
-      ]
-      iex> Tempus.next_free(slots, origin: ~D|2020-08-12|, count: :infinity, direction: :bwd)
-      [
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]}
-      ]
+      ~I[2020-08-15 00:00:00.000000Z → ∞]un
   """
   @telemetria level: :debug
   def next_free(slots, opts \\ [])
 
-  def next_free(%Slots{slots: slots}, opts),
-    do: do_next_free(slots, options(opts))
-
-  defp do_next_free([], {origin, 0, -1}),
-    do: %Slot{from: nil, to: Slot.shift(origin, from: -1, unit: :microsecond).from}
-
-  defp do_next_free([], {origin, _count, -1}),
-    do: [%Slot{from: nil, to: Slot.shift(origin, from: -1, unit: :microsecond).from}]
-
-  defp do_next_free([], {origin, 0, 1}),
-    do: %Slot{from: Slot.shift(origin, to: 1, unit: :microsecond).to, to: nil}
-
-  defp do_next_free([], {origin, _count, 1}),
-    do: [%Slot{from: Slot.shift(origin, to: 1, unit: :microsecond).to, to: nil}]
-
-  defp do_next_free(slots, {origin, count, 1}) do
+  def next_free(%Slots{} = slots, opts) do
     slots
-    |> do_add_infinite_slots(origin)
-    |> Enum.chunk_every(2, 1)
-    |> Enum.reduce_while([], fn
-      _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
-        {:halt, acc}
-
-      [%Slot{to: from}, %Slot{from: to}], acc ->
-        free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
-
-        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
-          do: {:cont, [free_slot | acc]},
-          else: {:cont, acc}
-
-      [%Slot{to: from}], acc ->
-        free_slot = Slot.shift(%Slot{from: from}, from: 1)
-
-        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :gt,
-          do: {:cont, [free_slot | acc]},
-          else: {:cont, acc}
-    end)
-    |> Enum.sort({:asc, Slot})
-    |> wrap_result(count)
-  end
-
-  defp do_next_free(slots, {origin, count, -1}) do
-    slots
-    |> do_add_infinite_slots(origin)
-    |> Enum.reverse()
-    |> Enum.chunk_every(2, 1)
-    |> Enum.reduce_while([], fn
-      _, acc when (count == 0 and length(acc) > 0) or (length(acc) >= count and count != 0) ->
-        {:halt, acc}
-
-      [%Slot{from: to}, %Slot{to: from}], acc ->
-        free_slot = Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1)
-
-        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
-          do: {:cont, [free_slot | acc]},
-          else: {:cont, acc}
-
-      [%Slot{from: to}], acc ->
-        free_slot = Slot.shift(%Slot{to: to}, to: -1)
-
-        if Slot.cover?(free_slot, origin) or Slot.strict_compare(free_slot, origin) == :lt,
-          do: {:cont, [free_slot | acc]},
-          else: {:cont, acc}
-    end)
-    |> Enum.sort({:desc, Slot})
-    |> wrap_result(count)
-  end
-
-  @spec do_infinite_slot_after(origin :: Slot.t()) :: Slot.t()
-  defp do_infinite_slot_after(origin),
-    do: %Slot{
-      from: Slot.shift(origin, to: 1, unit: :microsecond).to,
-      to: nil
-    }
-
-  @spec do_infinite_slot_before(origin :: Slot.t()) :: Slot.t()
-  defp do_infinite_slot_before(origin),
-    do: %Slot{
-      from: nil,
-      to: Slot.shift(origin, from: -1, unit: :microsecond).from
-    }
-
-  @spec do_add_infinite_slots(slots :: [Slot.t()], origin :: Slot.t()) :: [Slot.t()]
-  defp do_add_infinite_slots([], origin),
-    do: [do_infinite_slot_before(origin), do_infinite_slot_after(origin)]
-
-  defp do_add_infinite_slots([first | _] = slots, origin) do
-    last = List.last(slots)
-
-    slots =
-      if Slot.compare(origin, first) == :lt,
-        do: [do_infinite_slot_before(origin) | slots],
-        else: slots
-
-    if Slot.compare(origin, last) == :gt,
-      do: slots ++ [do_infinite_slot_after(origin)],
-      else: slots
+    |> Slots.inverse()
+    |> next_busy(opts)
   end
 
   @doc """
@@ -550,61 +459,74 @@ defmodule Tempus do
   def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
     amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
 
-    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :fwd)
-
-    [%Slot{slot | from: origin} | slots]
+    slots
+    |> next_free(origin: origin, count: :infinity, direction: :fwd)
     |> Enum.reduce_while({origin, amount_in_microseconds}, fn
-      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
-        maybe_result = DateTime.add(slot.from, rest_to_add_in_microseconds, :microsecond)
+      %Slot{from: from, to: to}, {dt, ms} ->
+        from = [from, dt] |> Enum.reject(&is_nil/1) |> Enum.max(DateTime)
 
-        if is_nil(slot.to) or DateTime.compare(maybe_result, slot.to) != :gt,
-          do: {:halt, maybe_result},
-          else:
-            {:cont,
-             {maybe_result, rest_to_add_in_microseconds - Slot.duration(slot, :microsecond)}}
+        if is_nil(to) or
+             Slot.duration(%Slot{from: from, to: to}, :microsecond) > ms do
+          {:halt, DateTime.add(from, ms, :microsecond)}
+        else
+          {:cont, {to, ms - Slot.duration(%Slot{from: from, to: to}, :microsecond)}}
+        end
     end)
     |> case do
       %DateTime{} = result ->
         DateTime.truncate(result, unit)
 
-      {%DateTime{} = result, rest} when is_integer(rest) ->
-        DateTime.add(result, rest, :microsecond)
+      {dt, rest} when is_integer(rest) ->
+        DateTime.add(dt, rest, :microsecond)
     end
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add < 0 do
-    amount_in_microseconds = System.convert_time_unit(amount_to_add, unit, :microsecond)
+    amount_in_microseconds = System.convert_time_unit(-amount_to_add, unit, :microsecond)
 
-    [slot | slots] = next_free(slots, origin: origin, count: :infinity, direction: :bwd)
+    slots
+    |> Slots.inverse()
+    |> Enum.reduce_while([], fn
+      %Slot{from: nil} = slot, [] ->
+        {:cont, [slot]}
 
-    [%Slot{slot | to: origin} | slots]
-    |> Enum.reduce_while({origin, amount_in_microseconds}, fn
-      %Slot{} = slot, {_, rest_to_add_in_microseconds} ->
-        maybe_result = DateTime.add(slot.to, rest_to_add_in_microseconds, :microsecond)
+      %Slot{from: from} = _slot, _collected when is_coming_before(origin, from) ->
+        {:halt, nil}
 
-        if is_nil(slot.from) or DateTime.compare(maybe_result, slot.from) != :lt,
-          do: {:halt, maybe_result},
-          else:
-            {:cont,
-             {maybe_result, rest_to_add_in_microseconds + Slot.duration(slot, :microsecond)}}
+      %Slot{to: to} = slot, collected when is_coming_before(to, origin) ->
+        collected =
+          [slot | collected]
+          |> Enum.reduce_while({[], 0}, fn
+            _slot, {collected, ms} when ms >= amount_in_microseconds ->
+              {:halt, {collected, ms}}
+
+            slot, {collected, ms} ->
+              {:cont, {[slot | collected], ms + Slot.duration(slot, :microsecond)}}
+          end)
+          |> elem(0)
+          |> Enum.reverse()
+
+        {:cont, collected}
+
+      %Slot{from: from}, collected ->
+        slot = %Slot{from: from, to: origin}
+
+        result =
+          Enum.reduce_while([slot | collected], amount_in_microseconds, fn %Slot{} = slot, ms ->
+            duration = Slot.duration(slot, :microsecond)
+
+            if duration < ms,
+              do: {:cont, ms - duration},
+              else: {:halt, DateTime.add(slot.to, -ms, :microsecond)}
+          end)
+
+        {:halt, result}
     end)
     |> case do
-      %DateTime{} = result ->
-        DateTime.truncate(result, unit)
-
-      {%DateTime{} = result, rest} when is_integer(rest) ->
-        DateTime.add(result, rest, :microsecond)
+      %DateTime{} = dt -> DateTime.truncate(dt, unit)
+      [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end
   end
-
-  @spec wrap_result(slots :: Enumerable.t(), count :: count()) :: Slot.t() | Enumerable.t()
-  # defp wrap_result(%Slots{slots: slots}, count), do: wrap_result(slots, count)
-  # defp wrap_result(%Stream{} = slots, :stream), do: slots
-  # defp wrap_result(slots, :stream) when is_function(slots), do: slots
-  defp wrap_result(slots, :stream), do: Stream.map(slots, & &1)
-  defp wrap_result(slots, :infinity), do: slots
-  defp wrap_result(slots, 0), do: Enum.at(slots, 0)
-  defp wrap_result(slots, count) when is_integer(count) and count > 0, do: Enum.take(slots, count)
 
   @spec options(opts :: options()) :: options_tuple()
   defp options(opts) when is_list(opts) do

@@ -2,17 +2,22 @@ defmodule Tempus.Test do
   use ExUnit.Case, async: true
   doctest Tempus
   doctest Tempus.Slot
-  doctest Tempus.Slots
 
   alias Tempus.Slots
   # alias Kantox.Commons.CurrencyPair, as: Pair
 
   test "consuming stream" do
-    holidays = [~D|2020-08-06|, ~D|2020-08-13|]
-    weekends = Stream.map([~D|2020-08-08|, ~D|2020-08-20|, ~D|2020-08-22|], & &1)
-    schedule = holidays |> Enum.into(%Slots{}) |> Slots.merge(weekends)
+    holidays = [~D|2020-08-06|, ~D|2020-08-13|, ~D|2020-08-20|]
 
-    assert Slots.size(schedule) == 4
+    weekends = %Tempus.Slots{
+      slots: %Tempus.Slots.Stream{
+        slots: Stream.map([~D|2020-08-08|, ~D|2020-08-20|, ~D|2020-08-22|], &Tempus.Slot.wrap/1)
+      }
+    }
+
+    schedule = holidays |> Enum.into(%Slots{}) |> Slots.merge(weekends) |> Enum.to_list()
+
+    assert length(schedule) == 5
   end
 
   test "working days" do
@@ -88,36 +93,36 @@ defmodule Tempus.Test do
         %Slots{}
       )
 
-    stream =
-      Stream.iterate(
-        Tempus.Slot.wrap(~D|2020-08-06|),
-        fn acc ->
-          acc
-          |> Tempus.Slot.shift(from: micros_in_three_days, to: micros_in_three_days)
-          |> Tempus.Slot.shift_tz()
-        end
-      )
+    stream = %Slots{
+      slots:
+        Slots.Stream.iterate(
+          Tempus.Slot.wrap(~D|2020-08-06|),
+          fn acc ->
+            acc
+            |> Tempus.Slot.shift(from: micros_in_three_days, to: micros_in_three_days)
+            |> Tempus.Slot.shift_tz()
+          end
+        )
+    }
 
-    assert Tempus.Slots.merge(slots, stream) == %Slots{
-             slots: [
-               %Tempus.Slot{
-                 from: ~U[2020-08-06 00:00:00.000000Z],
-                 to: ~U[2020-08-06 23:59:59.999999Z]
-               },
-               %Tempus.Slot{
-                 from: ~U[2020-08-08 00:00:00.000000Z],
-                 to: ~U[2020-08-10 23:59:59.999999Z]
-               },
-               %Tempus.Slot{
-                 from: ~U[2020-08-12 00:00:00.000000Z],
-                 to: ~U[2020-08-12 23:59:59.999999Z]
-               },
-               %Tempus.Slot{
-                 from: ~U[2020-08-14 00:00:00.000000Z],
-                 to: ~U[2020-08-15 23:59:59.999999Z]
-               }
-             ]
-           }
+    assert Enum.take(Tempus.Slots.merge([slots, stream], join: true), 4) == [
+             %Tempus.Slot{
+               from: ~U[2020-08-06 00:00:00.000000Z],
+               to: ~U[2020-08-06 23:59:59.999999Z]
+             },
+             %Tempus.Slot{
+               from: ~U[2020-08-08 00:00:00.000000Z],
+               to: ~U[2020-08-10 23:59:59.999999Z]
+             },
+             %Tempus.Slot{
+               from: ~U[2020-08-12 00:00:00.000000Z],
+               to: ~U[2020-08-12 23:59:59.999999Z]
+             },
+             %Tempus.Slot{
+               from: ~U[2020-08-14 00:00:00.000000Z],
+               to: ~U[2020-08-15 23:59:59.999999Z]
+             }
+           ]
   end
 
   test "add/4" do

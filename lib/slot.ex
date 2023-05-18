@@ -78,6 +78,15 @@ defmodule Tempus.Slot do
     end
   end
 
+  @doc """
+  Helper macro to pattern-match void slots.
+  """
+  defmacro void do
+    quote do
+      %Slot{from: nil, to: nil}
+    end
+  end
+
   @spec valid?(slot :: Slot.t()) :: boolean()
   @doc """
   Checks whether the `Slot` is valid (to > from) or not.
@@ -177,10 +186,9 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.disjoint?(slot, outer)
       true
   """
-  def disjoint?(s1, s2) do
-    [%Slot{} = s1, %Slot{} = s2] = Enum.map([s1, s2], &wrap/1)
-    compare(s1, s2) in [:lt, :gt]
-  end
+  def disjoint?(%Slot{} = s1, %Slot{} = s2) when is_joint(s1, s2), do: false
+  def disjoint?(%Slot{}, %Slot{}), do: true
+  def disjoint?(s1, s2), do: [s1, s2] |> Enum.map(&wrap/1) |> Enum.reduce(&disjoint?/2)
 
   @doc """
   Returns `true` if two slots are neighbours, `false` otherwise.
@@ -213,7 +221,7 @@ defmodule Tempus.Slot do
 
       iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
       ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
-      #Slot<[from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
   """
   def intersect(slots) do
     Enum.reduce(slots, fn
@@ -248,10 +256,10 @@ defmodule Tempus.Slot do
   ### Example
 
       iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
 
       iex> Tempus.Slot.join([~D|2020-09-30|, ~D|2020-10-02|])
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
   """
   def join([]), do: %Slot{from: nil, to: nil}
   def join([slot | slots]), do: do_join(slots, wrap(slot))
@@ -286,10 +294,10 @@ defmodule Tempus.Slot do
   ### Example
 
       iex> Tempus.Slot.join(Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|))
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
 
       iex> Tempus.Slot.join(~D|2020-09-30|, ~D|2020-10-02|)
-      #Slot<[from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
   """
   def join(s1, s2), do: join([s1, s2])
 
@@ -387,7 +395,7 @@ defmodule Tempus.Slot do
   ## Examples
 
       iex> Tempus.Slot.wrap(~D|2020-08-06|)
-      #Slot<[from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]]>
+      %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}
   """
   def wrap(moment \\ nil, origin \\ DateTime.utc_now())
 
@@ -459,15 +467,33 @@ defmodule Tempus.Slot do
   @doc false
   @spec shift(
           slot :: t(),
-          action :: [{:to, integer()} | {:from, integer} | {:unit, System.time_unit()}]
+          action :: [
+            {:to, integer()} | {:from, integer()} | {:by, integer()} | {:unit, System.time_unit()}
+          ]
         ) :: Slot.t()
   def shift(%Slot{from: from, to: to}, action \\ []) do
-    unit = Keyword.get(action, :unit, :microsecond)
-    from = do_shift(from, Keyword.get(action, :from, 0), unit)
-    to = do_shift(to, Keyword.get(action, :to, 0), unit)
+    {multiplier, unit} =
+      case Keyword.get(action, :unit, :microsecond) do
+        :day -> {60 * 60 * 24 * 1_000_000, :microsecond}
+        :hour -> {60 * 60 * 1_000_000, :microsecond}
+        :minute -> {60 * 1_000_000, :microsecond}
+        other -> {1, other}
+      end
 
-    %Slot{from: from, to: to}
+    [by_from, by_to] =
+      action
+      |> Keyword.get(:by)
+      |> case do
+        nil -> Enum.map([:from, :to], &Keyword.get(action, &1, 0))
+        value -> [value, value]
+      end
+      |> Enum.map(&(&1 * multiplier))
+
+    check_shifted(do_shift(from, by_from, unit), do_shift(to, by_to, unit))
   end
+
+  defp check_shifted(from, to) when not is_coming_before(to, from), do: %Slot{from: from, to: to}
+  defp check_shifted(_, _), do: void()
 
   @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
         when maybe_datetime: nil | DateTime.t()
@@ -500,7 +526,7 @@ defmodule Tempus.Slot do
      from: DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York"),
      to: DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
   }
-  #⇒ #Slot<[from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]]>
+  #⇒ %Tempus.Slot{from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]}
   ```
   """
   def shift_tz(
@@ -511,26 +537,41 @@ defmodule Tempus.Slot do
     %Slot{from: DateTime.shift_zone!(from, tz, tz_db), to: DateTime.shift_zone!(to, tz, tz_db)}
   end
 
+  @spec gap([t()]) :: t()
+  @doc false
+  def gap([%Slot{to: from} = prev, %Slot{from: to} = next]) when is_coming_before(prev, next),
+    do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
+
+  def gap([prev, next]) when is_coming_before(next, prev), do: gap([next, prev])
+  def gap([%Slot{from: nil, to: from}]), do: shift(%Slot{from: from, to: nil}, from: 1)
+  def gap([%Slot{from: to, to: nil}]), do: shift(%Slot{from: nil, to: to}, to: -1)
+  def gap(_), do: void()
+
   defimpl Inspect do
     @moduledoc false
 
     import Inspect.Algebra
     @fancy_inspect Application.compile_env(:tempus, :inspect, :sigil)
 
+    defp value(from, to, _opts) do
+      Enum.map_join([from, to], " → ", fn
+        nil -> "∞"
+        dt -> DateTime.to_iso8601(dt)
+      end)
+    end
+
     def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
       opts.custom_options
       |> Keyword.get(:fancy, @fancy_inspect)
       |> case do
         truthy when truthy in [:emoji, true] ->
-          value = Enum.map_join([from, to], " → ", &DateTime.to_iso8601/1)
-
           tag =
             case truthy do
               :emoji -> "⌚"
-              true -> "#Slot"
+              true -> "𝕥"
             end
 
-          concat([tag, "<", value, ">"])
+          concat([tag, "(", value(from, to, opts), ")"])
 
         false ->
           concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
@@ -546,7 +587,7 @@ defmodule Tempus.Slot do
     end
 
     def inspect(%Tempus.Slot{from: from, to: to}, opts) do
-      concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+      concat(["~I(", value(from, to, opts), ")"])
     end
   end
 end
