@@ -487,8 +487,8 @@ defmodule Tempus do
     slots
     |> Slots.inverse()
     |> Enum.reduce_while([], fn
-      %Slot{from: nil} = slot, [] ->
-        {:cont, [slot]}
+      %Slot{from: nil} = slot, slots ->
+        {:cont, [slot | slots]}
 
       %Slot{from: from} = _slot, _collected when is_coming_before(origin, from) ->
         {:halt, nil}
@@ -523,6 +523,7 @@ defmodule Tempus do
         {:halt, result}
     end)
     |> case do
+      nil -> nil
       %DateTime{} = dt -> DateTime.truncate(dt, unit)
       [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end

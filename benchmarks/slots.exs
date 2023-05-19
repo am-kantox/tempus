@@ -6,7 +6,7 @@ first_weekend = %Slot{from: ~U|2018-01-05 21:00:00Z|, to: ~U|2018-01-08 08:59:59
 first_monday = Slot.wrap(~D|2018-01-08|)
 
 weekends =
-  Stream.iterate(
+  Slots.Stream.iterate(
     first_weekend,
     fn acc ->
       acc
@@ -16,7 +16,7 @@ weekends =
   )
 
 mondays =
-  Stream.iterate(
+  Slots.Stream.iterate(
     first_monday,
     fn acc ->
       acc
@@ -26,14 +26,13 @@ mondays =
   )
 
 slots = Enum.into([~D|2018-01-01|, ~D|2025-12-31|], %Slots{})
-weekend_slots = Slots.merge(slots, weekends)
-monday_slots = Slots.merge(slots, mondays)
+weekend_slots = Slots.merge([slots, %Slots{slots: weekends}])
+monday_slots = Slots.merge([slots, %Slots{slots: mondays}])
 
 Benchee.run(%{
   :add_plus => fn -> Tempus.add(weekend_slots, ~U|2020-09-13 12:00:00Z|, 600) end,
   :add_minus => fn -> Tempus.add(weekend_slots, ~U|2020-09-13 12:00:00Z|, -600) end,
-  :size_free? => fn -> Tempus.free?(weekend_slots, ~U|2020-09-13 12:00:00Z|, :size) end,
-  :smart_free? => fn -> Tempus.free?(weekend_slots, ~U|2020-09-13 12:00:00Z|, :smart) end,
+  :smart_free? => fn -> Tempus.free?(weekend_slots, ~U|2020-09-13 12:00:00Z|) end,
   :inverse => fn -> Slots.inverse(weekend_slots) end,
   :next_busy => fn -> Tempus.next_busy(weekend_slots, origin: ~D|2020-09-13|) end,
   :next_free => fn -> Tempus.next_free(weekend_slots, origin: ~D|2020-09-13|) end,

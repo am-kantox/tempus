@@ -296,7 +296,8 @@ defmodule Tempus.Slots.Stream do
     reducer = fn
       void(), nil -> {:halt, :void}
       slot, nil when is_slot_open(slot) -> {[], slot.to}
-      slot, dt -> {[emit_inversed_slot(dt, slot.from), slot.to]}
+      slot, nil -> {emit_inversed_slot(nil, slot.from), [slot.to]}
+      slot, dt -> {emit_inversed_slot(Enum.min(dt, DateTime), slot.from), [slot.to]}
     end
 
     stream = Stream.transform(stream, start_fun, reducer, last_fun, after_fun)
