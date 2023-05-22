@@ -434,6 +434,33 @@ defmodule Tempus do
 
   @doc """
   Adds an amount of units to the origin, considering slots given.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   ~D|2020-08-07|,
+      ...>   ~D|2020-08-10|,
+      ...>   ~D|2020-08-11|,
+      ...>   ~D|2020-08-14|
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, -10*60+1, :second)
+      ~U[2020-08-09 23:50:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-12 00:09:00Z|, -10*60, :second)
+      ~U[2020-08-09 23:59:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-12 00:10:00Z|, -10*60, :second)
+      ~U[2020-08-12 00:00:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-12 00:10:00Z|, -10*60-1, :second)
+      ~U[2020-08-09 23:59:59Z]
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, 10*60, :second)
+      ~U[2020-08-12 00:10:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-12 00:00:00Z|, 10*60, :second)
+      ~U[2020-08-12 00:10:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-09 23:55:00Z|, 10*60, :second)
+      ~U[2020-08-12 00:05:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-08 23:55:00Z|, 10*60, :second)
+      ~U[2020-08-09 00:05:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-06 23:55:00Z|, 2*3600*24 + 10*60, :second)
+      ~U[2020-08-12 00:05:00Z]
   """
   @spec add(
           slots :: Slots.t(),
@@ -490,8 +517,8 @@ defmodule Tempus do
       %Slot{from: nil} = slot, slots ->
         {:cont, [slot | slots]}
 
-      %Slot{from: from} = _slot, _collected when is_coming_before(origin, from) ->
-        {:halt, nil}
+      %Slot{from: from} = _slot, collected when is_coming_before(origin, from) ->
+        {:halt, do_calc_subtract(collected, amount_in_microseconds)}
 
       %Slot{to: to} = slot, collected when is_coming_before(to, origin) ->
         collected =
@@ -510,23 +537,23 @@ defmodule Tempus do
 
       %Slot{from: from}, collected ->
         slot = %Slot{from: from, to: origin}
-
-        result =
-          Enum.reduce_while([slot | collected], amount_in_microseconds, fn %Slot{} = slot, ms ->
-            duration = Slot.duration(slot, :microsecond)
-
-            if duration < ms,
-              do: {:cont, ms - duration},
-              else: {:halt, DateTime.add(slot.to, -ms, :microsecond)}
-          end)
-
-        {:halt, result}
+        {:halt, do_calc_subtract([slot | collected], amount_in_microseconds)}
     end)
     |> case do
       nil -> nil
       %DateTime{} = dt -> DateTime.truncate(dt, unit)
       [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end
+  end
+
+  defp do_calc_subtract(slots, amount) do
+    Enum.reduce_while(slots, amount, fn %Slot{} = slot, ms ->
+      duration = Slot.duration(slot, :microsecond)
+
+      if duration < ms,
+        do: {:cont, ms - duration},
+        else: {:halt, DateTime.add(slot.to, -ms, :microsecond)}
+    end)
   end
 
   @spec options(opts :: options()) :: options_tuple()
