@@ -240,9 +240,11 @@ defmodule Tempus.Guards do
   @spec is_coming_before(Date.t() | DateTime.t(), Date.t() | DateTime.t()) :: boolean()
   @spec is_coming_before(Slot.t(), Slot.t()) :: boolean()
   defguard is_coming_before(o1, o2)
-           # (is_datetime(o1) and is_slot(o2) and is_datetime_coming_before(o1, o2.from)) or
-           # (is_slot(o1) and is_datetime(o2) and is_datetime_coming_before(o1.to, o2)) or
-           when (is_date(o1) and is_date(o2) and is_date_coming_before(o1, o2)) or
+           when (is_datetime(o1) and is_slot(o2) and
+                   is_datetime_coming_before(o1, :erlang.map_get(:from, o2))) or
+                  (is_slot(o1) and is_datetime(o2) and
+                     is_datetime_coming_before(:erlang.map_get(:to, o1), o2)) or
+                  (is_date(o1) and is_date(o2) and is_date_coming_before(o1, o2)) or
                   (is_datetime(o1) and is_date(o2) and is_date_coming_before(o1, o2)) or
                   (is_date(o1) and is_datetime(o2) and is_date_coming_before(o1, o2)) or
                   (is_datetime(o1) and is_datetime(o2) and is_datetime_coming_before(o1, o2)) or

@@ -346,6 +346,37 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
+  @doc """
+  Splits the slots by the pivot given as a `Slot.t` or as a function.
+
+  To keep it consistent, the function actually does _split it until_,
+  which is intuitive when the pivot is given and kinda counter-intuitive
+  when the _locator_ function is given.
+
+  See the examples below to grasp the reasoning behind this
+  architectural decision.
+
+  ### Examples
+
+      iex> import Tempus.Guards
+      ...> import Tempus.Sigils
+      ...> slots =
+      ...> [~D|2020-08-07|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|]
+      ...> |> Enum.into(%Tempus.Slots.Stream{})
+      ...> slots |> Tempus.Slots.Stream.split(~U|2020-08-09T12:00:00Z|) |> Tuple.to_list() |> Enum.map(&Enum.to_list/1)
+      [
+        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
+        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+      ]
+      ...> slots
+      ...> |> Tempus.Slots.Stream.split(&is_coming_before(~U|2020-08-09T12:00:00Z|, &1))
+      ...> |> Tuple.to_list()
+      ...> |> Enum.map(&Enum.to_list/1)
+      [
+        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
+        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+      ]
+  """
   @spec split(t(), Slots.locator(), keyword()) :: {Enumerable.t(Slot.t()), Enumerable.t(Slot.t())}
   def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
     greedy? = Keyword.get(options, :greedy, true)
@@ -375,7 +406,9 @@ defmodule Tempus.Slots.Stream do
     do_split_until(stream, pivot |> Slot.wrap() |> to_locator(), adjustment)
   end
 
-  def do_split_until(%Slots.Stream{slots: stream}, locator, adjustment) when adjustment >= 0 do
+  def do_split_until(%Slots.Stream{slots: stream}, locator, adjustment)
+      when is_function(locator, 1) and adjustment >= 0 do
+    locator = &(not locator.(&1))
     tail = Stream.drop_while(stream, locator)
 
     head =

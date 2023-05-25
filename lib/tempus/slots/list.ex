@@ -200,12 +200,8 @@ defmodule Tempus.Slots.List do
 
   ### Example
 
-      iex> [
-      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-08|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-10|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-12|)
-      ...> ] |> Enum.into(%Tempus.Slots.List{})
+      iex> [~D|2020-08-07|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|]
+      ...> |> Enum.into(%Tempus.Slots.List{})
       ...> |> Tempus.Slots.List.inverse()
       %Tempus.Slots.List{slots: [
         %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
@@ -251,7 +247,32 @@ defmodule Tempus.Slots.List do
   end
 
   @doc """
-  Splits the slots by the pivot given as a `t:Slot.t` or as a function.
+  Splits the slots by the pivot given as a `Slot.t` or as a function.
+
+  To keep it consistent, the function actually does _split it until_,
+  which is intuitive when the pivot is given and kinda counter-intuitive
+  when the _locator_ function is given.
+
+  See the examples below to grasp the reasoning behind this
+  architectural decision.
+
+  ### Examples
+
+      iex> import Tempus.Guards
+      ...> import Tempus.Sigils
+      ...> slots =
+      ...> [~D|2020-08-07|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|]
+      ...> |> Enum.into(%Tempus.Slots.List{})
+      ...> slots |> Tempus.Slots.List.split(~U|2020-08-09T12:00:00Z|)
+      {
+        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
+        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+      }
+      ...> slots |> Tempus.Slots.List.split(&is_coming_before(~U|2020-08-09T12:00:00Z|, &1))
+      {
+        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
+        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+      }
   """
   @spec split(t(), Slots.locator(), keyword()) :: {[Slot.t()], [Slot.t()]}
   def split(slots, pivot, options \\ []) when is_locator(pivot) do
