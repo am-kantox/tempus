@@ -209,7 +209,7 @@ defmodule Tempus do
   def slice(slots, nil, nil, _), do: slots
 
   def slice(slots, from, nil, type),
-    do: Slots.drop_until(slots, from, greedy: type == :greedy)
+    do: Slots.drop_until(slots, from, greedy: type != :greedy)
 
   def slice(slots, nil, to, type),
     do: Slots.take_until(slots, to, greedy: type == :greedy)

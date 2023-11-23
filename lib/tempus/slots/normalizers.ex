@@ -18,8 +18,8 @@ defmodule Tempus.Slots.Normalizers do
 
   @spec to_locator(Slots.locator()) :: (Slot.t() -> boolean())
   def to_locator(slot, negate? \\ false)
-  def to_locator(%Slot{} = slot, false), do: &is_coming_before(&1, slot)
-  def to_locator(%Slot{} = slot, true), do: &is_coming_before(slot, &1)
+  def to_locator(%Slot{} = slot, false), do: &is_coming_before(slot, &1)
+  def to_locator(%Slot{} = slot, true), do: &is_coming_before(&1, slot)
   def to_locator(fun, false) when is_function(fun, 1), do: fun
   def to_locator(fun, true) when is_function(fun, 1), do: fn arg -> not fun.(arg) end
 
