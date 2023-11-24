@@ -37,7 +37,7 @@ defmodule Tempus.Slots do
   @type t(group) :: t(group, implementation(group))
   @type t :: t(module())
   @typedoc "The type to use in navigation and/or rewinding slots enumerables"
-  @type locator :: Slot.origin() | (Slot.t() -> boolean())
+  @type locator :: Slot.origin() | (Slot.t() -> :gt | :eq | :lt | true | false)
 
   @implementation Application.compile_env(:tempus, :implementation, Tempus.Slots.List)
 

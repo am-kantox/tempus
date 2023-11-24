@@ -16,12 +16,33 @@ defmodule Tempus.Slots.Normalizers do
     end
   end
 
-  @spec to_locator(Slots.locator()) :: (Slot.t() -> boolean())
+  @spec inverse_inequality(:gt | :eq | :lt | true | false) :: :gt | :eq | :lt | true | false
+  defp inverse_inequality(:gt), do: :lt
+  defp inverse_inequality(:lt), do: :gt
+  defp inverse_inequality(:eq), do: :eq
+  defp inverse_inequality(true), do: false
+  defp inverse_inequality(false), do: true
+
+  @spec to_locator(Slots.locator()) :: (Slot.t() -> :gt | :eq | :lt)
   def to_locator(slot, negate? \\ false)
-  def to_locator(%Slot{} = slot, false), do: &is_coming_before(slot, &1)
-  def to_locator(%Slot{} = slot, true), do: &is_coming_before(&1, slot)
+
+  def to_locator(%Slot{} = slot, false) do
+    fn other ->
+      case {is_coming_before(slot, other), is_coming_before(other, slot)} do
+        {false, false} -> :eq
+        {true, false} -> :gt
+        {false, true} -> :lt
+      end
+    end
+  end
+
+  def to_locator(%Slot{} = slot, true),
+    do: fn other -> other |> to_locator(slot, false).() |> inverse_inequality() end
+
   def to_locator(fun, false) when is_function(fun, 1), do: fun
-  def to_locator(fun, true) when is_function(fun, 1), do: fn arg -> not fun.(arg) end
+
+  def to_locator(fun, true) when is_function(fun, 1),
+    do: fn other -> other |> fun.() |> inverse_inequality() end
 
   defp warning_jid(other),
     do: IO.warn("`:join` argument must be boolean or integer, #{inspect(other)} given")

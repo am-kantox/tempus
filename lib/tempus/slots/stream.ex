@@ -382,18 +382,11 @@ defmodule Tempus.Slots.Stream do
     greedy? = Keyword.get(options, :greedy, true)
     adjustment = Keyword.get(options, :adjustment, 0)
 
-    {head, tail} = do_split_until(slots, pivot, adjustment)
+    {head, joint, tail} = do_split_until(slots, pivot, adjustment)
 
-    case {greedy?, pivot} do
-      {true, %Slot{} = origin} ->
-        {Stream.concat(head, Stream.take_while(tail, &is_joint(&1, origin))), tail}
-
-      {false, %Slot{} = origin} ->
-        {head, Stream.drop_while(tail, &is_joint(&1, origin))}
-
-      _ ->
-        {head, tail}
-    end
+    if greedy?,
+      do: {Stream.concat(head, joint), Stream.concat(joint, tail)},
+      else: {head, tail}
   end
 
   defmacrop match_chunk(count) do
@@ -402,26 +395,46 @@ defmodule Tempus.Slots.Stream do
     quote do: [unquote_splicing(underscores), var!(slot)]
   end
 
-  def do_split_until(%Slots.Stream{} = stream, pivot, adjustment) when is_origin(pivot) do
+  @compile {:inline, empty_stream: 0}
+  defp empty_stream, do: Stream.map([], & &1)
+
+  defp do_split_until(%Slots.Stream{} = stream, pivot, adjustment) when is_origin(pivot) do
     do_split_until(stream, pivot |> Slot.wrap() |> to_locator(), adjustment)
   end
 
-  def do_split_until(%Slots.Stream{slots: stream}, locator, adjustment)
-      when is_function(locator, 1) and adjustment >= 0 do
-    locator = &(not locator.(&1))
-    tail = Stream.drop_while(stream, locator)
+  defp do_split_until(%Slots.Stream{slots: stream}, locator, 0) when is_function(locator, 1) do
+    le_locator = &(locator.(&1) in [:lt, :eq, false])
+    lt_locator = &(locator.(&1) in [:lt, false])
 
-    head =
-      stream
-      |> Stream.take_while(locator)
-      |> Stream.concat(Stream.take(tail, adjustment))
+    tail = Stream.drop_while(stream, le_locator)
+    head_and_joint = Stream.take_while(stream, le_locator)
 
-    tail = Stream.drop(tail, adjustment)
+    joint = Stream.drop_while(head_and_joint, lt_locator)
+    head = Stream.take_while(head_and_joint, lt_locator)
 
-    {head, tail}
+    {head, joint, tail}
   end
 
-  def do_split_until(slots, locator, adjustment), do: do_previous(slots, locator, -adjustment - 1)
+  defp do_split_until(%Slots.Stream{} = stream, locator, adjustment)
+       when is_function(locator, 1) and adjustment > 0 do
+    {head, joint, tail} = do_split_until(stream, locator, 0)
+    joint_size = joint |> Enum.to_list() |> length()
+
+    if adjustment >= joint_size do
+      head =
+        head |> Stream.concat(joint) |> Stream.concat(Stream.take(tail, adjustment - joint_size))
+
+      tail = Stream.drop(tail, adjustment - joint_size)
+      {head, empty_stream(), tail}
+    else
+      head = head |> Stream.concat(Stream.take(joint, adjustment))
+      tail = joint |> Stream.drop(adjustment) |> Stream.concat(tail)
+      {head, empty_stream(), tail}
+    end
+  end
+
+  defp do_split_until(slots, locator, adjustment),
+    do: do_previous(slots, locator, -adjustment - 1)
 
   Enum.each(0..@lookbehinds, fn count ->
     defp do_previous(%Slots.Stream{slots: stream}, locator, unquote(count)) do
@@ -431,7 +444,7 @@ defmodule Tempus.Slots.Stream do
       head = Stream.take_while(stream, reducer)
       tail = Stream.drop_while(stream, reducer)
 
-      [head, tail]
+      [head, empty_stream(), tail]
       |> Enum.map(fn stream ->
         Stream.flat_map(stream, fn
           [result | _] -> [result]
