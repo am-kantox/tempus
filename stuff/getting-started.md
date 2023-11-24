@@ -4,13 +4,13 @@
 
 `Tempus` library provides an easy way to handle and manipulate time slots.
 
-TYime slot is the base concept behind the library. It is basically the struct, containing `from` and `to` instances of `DateTime`. One might provide the list of slots, as `Enum` or as a `Stream`, and check whether another time slot and/or `DateTime` instance is overlapped or disjoined. Also one might get the next “available” slot(s) providing an `origin`, as well as next busy slot(s).
+Time slot is the base concept behind the library. It is basically the struct, containing `from` and `to` instances of `DateTime`. One might provide the list of slots, as `Enum` or as a `Stream`, and check whether another time slot and/or `DateTime` instance is overlapped or disjoined. Also one might get the next “available” slot(s) providing an `origin`, as well as next busy slot(s).
 
 It might be used e. g. to calculate the working days between now and some day in the future, providing the list of holidays, and the stream of weekends.
 
 ## Initializing Slots
 
-`Tempus.Slots` module leverages [`AVLTree`](https://github.com/japplegame/avl_tree). It exposes `add/2`, `merge/2` and `inverse/2` functions to add slots, merge the slots with another slot(s) and/or `Stream`, and inverse the slots respecively. Typically one starts with something like
+`Tempus.Slots` has an agnostic internal-storage interface for keeping slots. It might have a `List` or `Stream` behind, a self-baked implementation of `Tempus.Group` protocol, ot it might leverage [`AVLTree`](https://github.com/japplegame/avl_tree). It exposes `add/2`, `merge/2` and `inverse/2` functions to add slots, merge the slots with another slot(s) and/or `Stream`, and inverse the slots respecively. Typically one starts with something like
 
 ```elixir
 slots = [
