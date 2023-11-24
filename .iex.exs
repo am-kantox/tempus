@@ -7,7 +7,7 @@ IEx.configure(
   inspect: [limit: :infinity],
   colors: [
     eval_result: [:cyan, :bright],
-    eval_error: [[:red, :bright, "\n▶▶▶\n"]],
+    eval_error: [:red, :bright],
     eval_info: [:yellow, :bright],
     syntax_colors: [
       number: :red,
@@ -17,24 +17,7 @@ IEx.configure(
       nil: :magenta,
       list: :white
     ]
-  ],
-  default_prompt:
-    [
-      # cursor ⇒ column 1
-      "\e[G",
-      :blue,
-      "%prefix",
-      :blue,
-      "|⌚|",
-      :yellow,
-      "%counter",
-      " ",
-      :blue,
-      "▶",
-      :reset
-    ]
-    |> IO.ANSI.format()
-    |> IO.chardata_to_string()
+  ]
 )
 
 import Tempus.{Guards, Sigils}

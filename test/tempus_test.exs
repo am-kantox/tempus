@@ -57,31 +57,58 @@ defmodule Tempus.Test do
   # end
 
   test "slice/4" do
-    slots =
-      Enum.into(
-        [~D|2020-08-06|, ~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|, ~D|2020-08-14|],
-        %Slots{}
-      )
+    for kind <- [:list, :stream] do
+      empty = Slots.new(kind, [])
 
-    from = ~U[2020-08-08 12:00:00.000000Z]
-    to = ~U[2020-08-12 12:00:00.000000Z]
+      slots =
+        Slots.new(kind, [
+          ~D|2020-08-06|,
+          ~D|2020-08-08|,
+          ~D|2020-08-10|,
+          ~D|2020-08-12|,
+          ~D|2020-08-14|
+        ])
 
-    assert Tempus.slice(slots, from, to, :reluctant) == Enum.into([~D|2020-08-10|], %Slots{})
+      from = ~U[2020-08-08 12:00:00.000000Z]
+      to = ~U[2020-08-12 12:00:00.000000Z]
 
-    assert Tempus.slice(slots, from, to, :greedy) ==
-             Enum.into([~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|], %Slots{})
+      assert [Tempus.slice(slots, from, to, :reluctant), Enum.into([~D|2020-08-10|], empty)]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
 
-    assert Tempus.slice(slots, to, nil, :reluctant) == Enum.into([~D|2020-08-14|], %Slots{})
+      assert [
+               Tempus.slice(slots, from, to, :greedy),
+               Enum.into([~D|2020-08-08|, ~D|2020-08-10|, ~D|2020-08-12|], empty)
+             ]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
 
-    assert Tempus.slice(slots, to, nil, :greedy) ==
-             Enum.into([~D|2020-08-12|, ~D|2020-08-14|], %Slots{})
+      assert [Tempus.slice(slots, to, nil, :reluctant), Enum.into([~D|2020-08-14|], empty)]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
 
-    assert Tempus.slice(slots, nil, from, :reluctant) == Enum.into([~D|2020-08-06|], %Slots{})
+      assert [
+               Tempus.slice(slots, to, nil, :greedy),
+               Enum.into([~D|2020-08-12|, ~D|2020-08-14|], empty)
+             ]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
 
-    assert Tempus.slice(slots, nil, from, :greedy) ==
-             Enum.into([~D|2020-08-06|, ~D|2020-08-08|], %Slots{})
+      assert [Tempus.slice(slots, nil, from, :reluctant), Enum.into([~D|2020-08-06|], empty)]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
 
-    assert Tempus.slice(slots, nil, nil, :greedy) == slots
+      assert [
+               Tempus.slice(slots, nil, from, :greedy),
+               Enum.into([~D|2020-08-06|, ~D|2020-08-08|], empty)
+             ]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
+
+      assert [Tempus.slice(slots, nil, nil, :greedy), slots]
+             |> Enum.map(&Enum.to_list/1)
+             |> Enum.reduce(&Kernel.==/2)
+    end
   end
 
   test "merge/2" do
