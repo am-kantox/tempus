@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.10.1`** — [:ant:] `split/4` and tests for it: fixed
 - **`0.10.0`** — complete rewrite of implementations, 3–10× faster, `Slots` form an Abelian group now
 - **`0.9.1`** — `Tempus.Sigils.parse/1`
 - **`0.9.0`** — `Tempus.Guards`, `Tempus.slot/{1,2}`, `Tempus.guess/1`, better sigils, prepared for `:tempus_sql`
