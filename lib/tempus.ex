@@ -442,7 +442,11 @@ defmodule Tempus do
       ...>   ~D|2020-08-10|,
       ...>   ~D|2020-08-11|,
       ...>   ~D|2020-08-14|
-      ...> ] |> Enum.into(%Tempus.Slots{})
+      ...> ] |> Enum.into(Tempus.Slots.new(:stream, []))
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, 0, :second)
+      ~U[2020-08-12 00:00:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-12 01:00:00Z|, 0, :second)
+      ~U[2020-08-12 01:00:00Z]
       iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, -10*60+1, :second)
       ~U[2020-08-09 23:50:00Z]
       iex> Tempus.add(slots, ~U|2020-08-12 00:09:00Z|, -10*60, :second)
@@ -461,6 +465,22 @@ defmodule Tempus do
       ~U[2020-08-09 00:05:00Z]
       iex> Tempus.add(slots, ~U|2020-08-06 23:55:00Z|, 2*3600*24 + 10*60, :second)
       ~U[2020-08-12 00:05:00Z]
+
+      iex> slots = Tempus.Slots.new(:stream, [])
+      iex> Tempus.add(slots, ~U|2020-08-12 01:00:00Z|, 0, :second)
+      ~U[2020-08-12 01:00:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, 5*60+1, :second)
+      ~U[2020-08-11 23:05:01.000000Z]
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, -10*60+1, :second)
+      ~U[2020-08-11 22:50:01Z]
+
+      iex> slots = Tempus.Slots.new(:list, [])
+      iex> Tempus.add(slots, ~U|2020-08-12 01:00:00Z|, 0, :second)
+      ~U[2020-08-12 01:00:00Z]
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, 5*60+1, :second)
+      ~U[2020-08-11 23:05:01Z]
+      iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, -10*60+1, :second)
+      ~U[2020-08-11 22:50:01Z]
   """
   @spec add(
           slots :: Slots.t(),
@@ -471,16 +491,20 @@ defmodule Tempus do
   @telemetria level: :debug
   def add(slots, origin \\ DateTime.utc_now(), amount_to_add, unit \\ :second)
 
-  def add(%Slots{slots: []}, origin, amount_to_add, unit) do
+  def add(%Slots{slots: %Slots.List{slots: []}}, origin, amount_to_add, unit) do
     DateTime.add(origin, amount_to_add, unit)
   end
 
   def add(slots, origin, 0, unit) do
-    %{from: from} = next_free(slots, origin: origin)
+    case next_free(slots, origin: origin) do
+      %{from: %DateTime{} = from} ->
+        [from, origin]
+        |> Enum.max(DateTime)
+        |> DateTime.truncate(unit)
 
-    [from, origin]
-    |> Enum.max(DateTime)
-    |> DateTime.truncate(unit)
+      _ ->
+        origin
+    end
   end
 
   def add(slots, origin, amount_to_add, unit) when amount_to_add > 0 do
@@ -542,6 +566,7 @@ defmodule Tempus do
     |> case do
       nil -> nil
       %DateTime{} = dt -> DateTime.truncate(dt, unit)
+      [] -> DateTime.add(origin, amount_to_add, unit)
       [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end
   end
