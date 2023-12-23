@@ -7,6 +7,7 @@ erl_crash.dump
 *.ez
 tempus-*.tar
 /.elixir_ls/
+/.elixir-tools/
 /.dialyzer/*.plt*
 .mix_tasks
 config/.telemetria.config.json
