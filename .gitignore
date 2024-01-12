@@ -10,4 +10,5 @@ tempus-*.tar
 /.elixir-tools/
 /.dialyzer/*.plt*
 .mix_tasks
+.tool-versions
 config/.telemetria.config.json
