@@ -28,7 +28,9 @@ defmodule Tempus.MixProject do
         plt_add_apps: [:mix],
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
-      ]
+      ],
+      preferred_cli_env: [coveralls: :test, "coveralls.github": :test],
+      test_coverage: [tool: ExCoveralls]
     ]
   end
 
@@ -45,6 +47,7 @@ defmodule Tempus.MixProject do
       {:benchee, "~> 1.0", only: [:dev, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
+      {:excoveralls, "~> 0.13", only: [:test]},
       {:ex_doc, "~> 0.11", only: :dev}
     ]
   end
