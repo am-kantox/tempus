@@ -3,8 +3,29 @@ defmodule Tempus.Test do
   doctest Tempus
   doctest Tempus.Slot
 
-  alias Tempus.Slots
-  # alias Kantox.Commons.CurrencyPair, as: Pair
+  alias Tempus.{Slot, Slots}
+
+  test "Tempus.slot/1" do
+    from = ~U[2020-08-08 12:00:00.000000Z]
+    to = ~U[2020-08-12 12:00:00.000000Z]
+
+    assert {:ok, %Slot{from: ^from, to: ^to}} = Tempus.slot(from, to)
+    assert {:error, :invalid_input} = Tempus.slot(42, to)
+    assert {:error, :invalid_input} = Tempus.slot(from, 42)
+    assert %Slot{from: ^from, to: ^to} = Tempus.slot!(from, to)
+    assert_raise ArgumentError, fn -> Tempus.slot!(from, 42) end
+  end
+
+  test "Tempus.Slot.new/1" do
+    from = ~U[2020-08-08 12:00:00.000000Z]
+    to = ~U[2020-08-12 12:00:00.000000Z]
+
+    assert {:ok, %Slot{from: ^from, to: ^to}} = Tempus.Slot.new(from, to)
+    assert {:error, :invalid_input} = Tempus.Slot.new(42, to)
+    assert {:error, :invalid_input} = Tempus.Slot.new(from, 42)
+    assert %Slot{from: ^from, to: ^to} = Tempus.Slot.new!(from, to)
+    assert_raise ArgumentError, fn -> Tempus.Slot.new!(from, 42) end
+  end
 
   test "consuming stream" do
     holidays = [~D|2020-08-06|, ~D|2020-08-13|, ~D|2020-08-20|]

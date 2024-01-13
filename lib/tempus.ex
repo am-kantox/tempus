@@ -12,6 +12,7 @@ defmodule Tempus do
 
   use Tempus.Telemetria
 
+  require Tempus.Slot
   alias Tempus.{Sigils.NilParser, Slot, Slots}
 
   import Tempus.Guards
@@ -54,8 +55,16 @@ defmodule Tempus do
 
       iex> Tempus.guess("2023-04-10")
       {:ok, Tempus.Slot.wrap(~D[2023-04-10])}
+      iex> Tempus.guess(nil)
+      {:ok, %Tempus.Slot{from: nil, to: nil}}
+      iex> Tempus.guess("∞")
+      {:ok, %Tempus.Slot{from: nil, to: nil}}
+      iex> Tempus.guess("")
+      {:ok, %Tempus.Slot{from: nil, to: nil}}
       iex> Tempus.guess("2023-04-10T10:00:00Z")
       {:ok, Tempus.Slot.wrap(~U[2023-04-10T10:00:00Z])}
+      iex> Tempus.guess("10:00:00")
+      {:ok, Date.utc_today() |> DateTime.new!(Time.from_erl!({10, 0, 0})) |> Tempus.Slot.wrap()}
       iex> Tempus.guess("20230410T235007.123+0230")
       if Version.compare(System.version(), "1.14.0") == :lt do
         {:error, :invalid_format}
@@ -70,7 +79,7 @@ defmodule Tempus do
     input
     |> do_guess()
     |> case do
-      {:ok, nil} -> {:ok, nil}
+      {:ok, nil} -> {:ok, Slot.id()}
       {:ok, origin} -> {:ok, Slot.wrap(origin)}
       {:error, reason} -> {:error, reason}
     end
@@ -84,6 +93,8 @@ defmodule Tempus do
       iex> import Tempus.Sigils
       iex> Tempus.guess("2023-04-10", "2023-04-12")
       {:ok, ~I[2023-04-10 00:00:00.000000Z|2023-04-12 23:59:59.999999Z]}
+      iex> Tempus.guess("2023-04-10", nil)
+      {:ok, ~I[2023-04-10 00:00:00.000000Z|2023-04-10T23:59:59.999999Z]}
       iex> Tempus.guess("2023-04-10T10:00:00Z", "2023-04-12")
       {:ok, ~I[2023-04-10 10:00:00Z|2023-04-12 23:59:59.999999Z]}
       iex> Tempus.guess("20230410T235007.123+0230", "2023-04-12")
@@ -92,6 +103,10 @@ defmodule Tempus do
       else
         {:ok, ~I[2023-04-10 21:20:07.123Z|2023-04-12 23:59:59.999999Z]}
       end
+      iex> Tempus.guess("2023-04-10", :ok)
+      {:error, {:invalid_arguments, [to: :invalid_argument]}}
+      iex> Tempus.guess(:ok, "2023-04-10")
+      {:error, {:invalid_arguments, [from: :invalid_argument]}}
       iex> Tempus.guess("2023-04-10-15", :ok)
       {:error, {:invalid_arguments, [from: :invalid_format, to: :invalid_argument]}}
   """
@@ -107,7 +122,6 @@ defmodule Tempus do
     end
   end
 
-  defp do_guess("nil"), do: {:ok, nil}
   defp do_guess("∞"), do: {:ok, nil}
   defp do_guess(""), do: {:ok, nil}
 
@@ -203,6 +217,15 @@ defmodule Tempus do
   @doc """
   Slices the `%Slots{}` based on origins `from` and `to` and an optional type
     (default: `:reluctant`.) Returns sliced `%Slots{}` back.
+
+  ### Examples
+
+      iex> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> slots |> Tempus.slice(~D|2020-08-07|, ~D|2020-08-11|) |> Enum.count()
+      1
   """
   def slice(slots, from, to, type \\ :reluctant)
 
@@ -224,8 +247,20 @@ defmodule Tempus do
   @doc since: "0.7.0"
   @doc """
   Drops slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
+
+  ### Examples
+
+      iex> import Tempus.Guards
+      ...> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> slots
+      ...> |> Tempus.drop_while(&is_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
+      ...> |> Enum.count()
+      1
   """
-  def drop_while(%Slots{slots: slots}, fun) do
+  def drop_while(%Slots{} = slots, fun) do
     Slots.drop_until(slots, &(not fun.(&1)))
   end
 
@@ -233,8 +268,20 @@ defmodule Tempus do
   @doc since: "0.7.0"
   @doc """
   Takes slots at the beginning of the `%Slots{}` struct while `fun` returns a truthy value.
+
+  ### Examples
+
+      iex> import Tempus.Guards
+      ...> slots = [
+      ...>   Tempus.Slot.wrap(~D|2020-08-07|),
+      ...>   Tempus.Slot.wrap(~D|2020-08-10|)
+      ...> ] |> Enum.into(%Tempus.Slots{})
+      iex> slots
+      ...> |> Tempus.take_while(&is_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
+      ...> |> Enum.count()
+      1
   """
-  def take_while(%Slots{slots: slots}, fun) do
+  def take_while(%Slots{} = slots, fun) do
     Slots.take_until(slots, &(not fun.(&1)))
   end
 
@@ -342,6 +389,8 @@ defmodule Tempus do
       %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd)
       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
+      iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd, count: :infinity)
+      slots
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-11 11:00:00Z|, to: ~U|2020-08-11 12:00:00Z|})
       nil
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|}, direction: :bwd)
@@ -410,7 +459,8 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-07|),
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
       ...>   Tempus.Slot.wrap(~D|2020-08-12|),
-      ...>   Tempus.Slot.wrap(~D|2020-08-14|)
+      ...>   Tempus.Slot.wrap(~D|2020-08-14|),
+      ...>   Tempus.Slot.wrap(~D|2030-08-14|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> Tempus.next_free(slots, origin: %Tempus.Slot{from: ~U|2020-08-08 23:00:00Z|, to: ~U|2020-08-09 12:00:00Z|})
       ~I[2020-08-08 00:00:00.000000Z → 2020-08-09 23:59:59.999999Z]
@@ -421,7 +471,9 @@ defmodule Tempus do
       iex> Tempus.next_free(slots, origin: ~D|2020-08-13|)
       ~I[2020-08-13 00:00:00.000000Z → 2020-08-13 23:59:59.999999Z]
       iex> Tempus.next_free(slots, origin: ~D|2020-08-14|)
-      ~I[2020-08-15 00:00:00.000000Z → ∞]un
+      ~I[2020-08-15 00:00:00.000000Z → 2030-08-13 23:59:59.999999Z]
+      iex> Tempus.next_free(slots)
+      ~I[2020-08-15 00:00:00.000000Z → 2030-08-13 23:59:59.999999Z]
   """
   @telemetria level: :debug
   def next_free(slots, opts \\ [])
@@ -481,6 +533,8 @@ defmodule Tempus do
       ~U[2020-08-11 23:05:01Z]
       iex> Tempus.add(slots, ~U|2020-08-11 23:00:00Z|, -10*60+1, :second)
       ~U[2020-08-11 22:50:01Z]
+      iex> slots |> Tempus.add(1) |> DateTime.to_date()
+      Date.utc_today()
   """
   @spec add(
           slots :: Slots.t(),

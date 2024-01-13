@@ -87,6 +87,10 @@ defmodule Tempus.Slot do
     end
   end
 
+  @doc "Identity element, void slot `~I[nil → nil]`"
+  @spec id :: Slot.t()
+  def id, do: void()
+
   @spec valid?(slot :: Slot.t()) :: boolean()
   @doc """
   Checks whether the `Slot` is valid (to > from) or not.
@@ -265,7 +269,8 @@ defmodule Tempus.Slot do
   def join([slot | slots]), do: do_join(slots, wrap(slot))
 
   defp do_join([], acc), do: acc
-  defp do_join(_, %Slot{from: nil, to: nil} = inf), do: inf
+  defp do_join(any, %Slot{from: nil, to: nil}), do: any
+  defp do_join([%Slot{from: nil, to: nil} | slots], acc), do: do_join(slots, acc)
 
   defp do_join([slot | slots], acc) do
     slot = wrap(slot)
