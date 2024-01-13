@@ -109,6 +109,8 @@ defmodule Tempus do
       {:error, {:invalid_arguments, [from: :invalid_argument]}}
       iex> Tempus.guess("2023-04-10-15", :ok)
       {:error, {:invalid_arguments, [from: :invalid_format, to: :invalid_argument]}}
+      iex> Tempus.guess("2023-20-40", "10:70:80")
+      {:error, {:invalid_arguments, [from: :invalid_date, to: :invalid_time]}}
   """
   @spec guess(from :: nil | binary(), to :: nil | binary()) :: {:ok, Slot.t()} | {:error, any()}
   def guess(from, to) do
@@ -391,6 +393,12 @@ defmodule Tempus do
       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}
       iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd, count: :infinity)
       slots
+      iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, count: 3.1415)
+      ** (Tempus.ArgumentError) invalid argument: expected ‹Elixir.Integer›, got: ‹3.1415›
+      iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd, count: 2)
+      Enum.to_list(slots)
+      iex> Tempus.next_busy(slots, origin: ~D|2020-08-10|, direction: :bwd, count: 1)
+      Enum.drop(slots, 1)
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-11 11:00:00Z|, to: ~U|2020-08-11 12:00:00Z|})
       nil
       iex> Tempus.next_busy(slots, origin: %Tempus.Slot{from: ~U|2020-08-06 11:00:00Z|, to: ~U|2020-08-06 12:00:00Z|}, direction: :bwd)
@@ -618,9 +626,9 @@ defmodule Tempus do
         {:halt, do_calc_subtract([slot | collected], amount_in_microseconds)}
     end)
     |> case do
-      nil -> nil
       %DateTime{} = dt -> DateTime.truncate(dt, unit)
       [] -> DateTime.add(origin, amount_to_add, unit)
+      nil -> nil
       [%Slot{from: nil, to: nil}] -> DateTime.add(origin, amount_to_add, unit)
     end
   end
