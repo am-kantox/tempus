@@ -125,6 +125,16 @@ defmodule Tempus.Guards do
 
   @doc """
   Guard to validate whether the slot is `nil` (has neither end set.)
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_slot_nil: 1]
+      iex> is_slot_nil(Tempus.Slot.id())
+      true
+      iex> is_slot_nil(Tempus.Slot.wrap(Date.utc_today()))
+      false
+      iex> is_slot_nil(:ok)
+      false
   """
   @spec is_slot_nil(Slot.t()) :: boolean()
   defguard is_slot_nil(s)
@@ -136,6 +146,16 @@ defmodule Tempus.Guards do
 
   Please note, that the slot having both ends set to `nil` is considered
     a special case and is not reported as _open_.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_slot_open: 1]
+      iex> is_slot_open(%Tempus.Slot{from: nil, to: DateTime.utc_now()})
+      true
+      iex> is_slot_open(Tempus.Slot.wrap(Date.utc_today()))
+      false
+      iex> is_slot_open(:ok)
+      false
   """
   @spec is_slot_open(Slot.t()) :: boolean()
   defguard is_slot_open(s)
@@ -146,6 +166,15 @@ defmodule Tempus.Guards do
   @doc """
   Guard to validate whether the `t:DateTime.t/0` given as the first argument
     is the border of the slot.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_slot_border: 2]
+      iex> dt = DateTime.utc_now()
+      ...> is_slot_border(dt, %Tempus.Slot{from: dt, to: nil})
+      true
+      iex> is_slot_border(dt, Tempus.Slot.wrap(Date.utc_today()))
+      false
   """
   @spec is_slot_border(DateTime.t(), Slot.t()) :: boolean()
   defguard is_slot_border(dt, s)
@@ -164,9 +193,9 @@ defmodule Tempus.Guards do
       ...> s3 = ~I[2023-04-09 00:00:00Z|2023-04-09 23:59:59Z]
       ...> is_slot_equal(s1, s1)
       true
-      ...> is_slot_equal(s1, s2)
+      iex> is_slot_equal(s1, s2)
       true
-      ...> is_slot_equal(s1, s3)
+      iex> is_slot_equal(s1, s3)
       false
 
   """
@@ -187,7 +216,7 @@ defmodule Tempus.Guards do
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_joint(s1, s2)
       true
-      ...> s1 = ~I[2023-04-09 23:00:00Z|2023-04-10 00:00:00Z]
+      iex> s1 = ~I[2023-04-09 23:00:00Z|2023-04-10 00:00:00Z]
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_joint(s1, s2)
       true
@@ -211,11 +240,11 @@ defmodule Tempus.Guards do
       ...> s = %Tempus.Slot{from: from, to: to}
       ...> is_covered(from, s) and is_covered(to, s)
       true
-      ...> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+      iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_covered(s1, s2)
       false
-      ...> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+      iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_covered(s1, s2)
       false
@@ -234,7 +263,7 @@ defmodule Tempus.Guards do
       iex> import Tempus.Guards, only: [is_coming_before: 2]
       ...> is_coming_before(~D[2023-04-10], ~U[2023-04-11T00:00:00.000000Z])
       true
-      ...> is_coming_before(~D[2023-04-10], ~D[2023-04-10])
+      iex> is_coming_before(~D[2023-04-10], ~D[2023-04-10])
       false
   """
   @spec is_coming_before(Date.t() | DateTime.t(), Date.t() | DateTime.t()) :: boolean()
@@ -265,12 +294,14 @@ defmodule Tempus.Guards do
       iex> import Tempus.Guards, only: [joint_in_delta?: 3]
       ...> import Tempus.Sigils
       ...> s1 = ~I[2023-04-09 23:00:00Z|2023-04-09 23:59:59Z]
-      ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
+      ...> joint_in_delta?(s1, s1, 1)
+      true
+      iex> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> joint_in_delta?(s1, s2, 1)
       true
-      ...> joint_in_delta?(s2, s1, 1)
+      iex> joint_in_delta?(s2, s1, 1)
       true
-      ...> joint_in_delta?(s1, s2, microsecond: 500)
+      iex> joint_in_delta?(s1, s2, microsecond: 500)
       false
   """
   def joint_in_delta?(s1, s2, _delta) when is_joint(s1, s2), do: true
