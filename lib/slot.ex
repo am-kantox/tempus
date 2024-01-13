@@ -40,10 +40,17 @@ defmodule Tempus.Slot do
 
   ## Examples
 
+      iex> import Tempus.Sigils
       iex> Tempus.Slot.new(~U|2015-09-30 00:00:00Z|, ~U|2015-10-01 01:00:00Z|)
       {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}}
       iex> Tempus.Slot.new(~D|2015-09-30|, ~U|2015-10-01T12:00:00Z|)
       {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}}
+      iex> Tempus.Slot.new(nil, nil)
+      {:ok, Tempus.Slot.id()}
+      iex> Tempus.Slot.new(~D|2015-09-30|, nil)
+      {:ok, ~I(2015-09-30T00:00:00.000000Z → ∞)un}
+      iex> Tempus.Slot.new(nil, ~D|2015-09-30|)
+      {:ok, ~I(∞ → 2015-09-30T23:59:59.999999Z)nu}
       iex> Tempus.Slot.new(:ok, :ok)
       {:error, :invalid_input}
   """
@@ -102,6 +109,14 @@ defmodule Tempus.Slot do
       true
       iex> Tempus.Slot.valid?(%Tempus.Slot{from: slot.to, to: slot.from})
       false
+      iex> slot = %Tempus.Slot{from: nil, to: ~U|2015-10-01 01:00:00Z|}
+      ...> Tempus.Slot.valid?(slot)
+      true
+      iex> slot = %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: nil}
+      ...> Tempus.Slot.valid?(slot)
+      true
+      iex> Tempus.Slot.valid?(:ok)
+      false
   """
   def valid?(%Slot{from: nil, to: %DateTime{}}), do: true
   def valid?(%Slot{from: %DateTime{}, to: nil}), do: true
@@ -123,6 +138,14 @@ defmodule Tempus.Slot do
        %Tempus.Slot{from: ~U[2023-04-12 13:00:00Z], to: ~U[2023-04-12 23:59:59.999999Z]}]
       iex> Tempus.Slot.xor(outer, inner) == Tempus.Slot.xor(inner, outer)
       true
+      iex> {:ok, past} = Tempus.Slot.new(~U[2020-04-12 12:00:00Z], ~U[2020-04-12 13:00:00Z])
+      ...> Tempus.Slot.xor(past, inner)
+      [past, inner]
+      ...> Tempus.Slot.xor(inner, past)
+      [past, inner]
+      iex> {:ok, border} = Tempus.Slot.new(~U[2023-04-12 11:00:00Z], ~U[2023-04-12 12:00:00Z])
+      ...> Tempus.Slot.xor(border, inner)
+      [Tempus.Slot.new!(~U[2023-04-12 11:00:00Z], ~U[2023-04-12 13:00:00Z])]
   """
   @spec xor(outer :: Slot.t(), inner :: Slot.t()) :: [Slot.t()]
   def xor(outer, inner) when is_coming_before(outer, inner), do: [outer, inner]
@@ -156,6 +179,8 @@ defmodule Tempus.Slot do
       true
       iex> Tempus.Slot.cover?(slot, d_from, true)
       false
+      iex> Tempus.Slot.cover?(slot, ~U|2000-01-01 00:00:00Z|)
+      false
       iex> Tempus.Slot.cover?(slot, d_to)
       false
   """
@@ -188,6 +213,8 @@ defmodule Tempus.Slot do
       false
       iex> outer = %Tempus.Slot{from: ~U|2015-10-01 00:00:01Z|, to: ~U|2015-10-01 01:00:00Z|}
       iex> Tempus.Slot.disjoint?(slot, outer)
+      true
+      iex> Tempus.Slot.disjoint?(~D|2000-01-01|, ~U|2015-10-01 00:00:01Z|)
       true
   """
   def disjoint?(%Slot{} = s1, %Slot{} = s2) when is_joint(s1, s2), do: false
@@ -226,6 +253,9 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
       ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
       %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+      iex> Tempus.Slot.intersect([~D|2020-09-30|, ~D|2000-09-30|,
+      ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
+      nil
   """
   def intersect(slots) do
     Enum.reduce(slots, fn
