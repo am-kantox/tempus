@@ -6,7 +6,8 @@ defmodule Tempus.Sigils do
   defmodule NilParser do
     @moduledoc false
 
-    def from_iso8601("nil"), do: {:ok, nil}
+    def from_iso8601(nil), do: {:ok, nil}
+    def from_iso8601(""), do: {:ok, nil}
     def from_iso8601("∞"), do: {:ok, nil}
     def from_iso8601(_other), do: {:error, :not_a_nil}
   end
@@ -36,7 +37,12 @@ defmodule Tempus.Sigils do
       %Tempus.Slot{from: ~U[2021-03-30 00:00:00.000000Z], to: ~U[2021-03-30 23:59:59.999999Z]}
       iex> ~I(2021-03-30 06:35:40Z .. 2021-03-30 06:36:00Z)g
       %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}
-
+      iex> ~I(|2021-03-30 06:36:00Z)g
+      %Tempus.Slot{from: ~U[2021-03-30 06:36:00Z], to: ~U[2021-03-30 06:36:00Z]}
+      iex> ~I(2021-03-30 06:36:00Z|)g
+      %Tempus.Slot{from: ~U[2021-03-30 06:36:00Z], to: ~U[2021-03-30 06:36:00Z]}
+      iex> Code.compile_quoted(quote do: ~I(foo|bar)g)
+      ** (CompileError) nofile: `~I` sigil input is malformed, error: :invalid_format
   """
   defmacro sigil_I({:<<>>, _, [binary]}, ~c"g") when is_binary(binary) do
     from_iso = List.duplicate(&Tempus.guess/1, 2)
@@ -70,6 +76,8 @@ defmodule Tempus.Sigils do
 
       iex> Tempus.Sigils.parse("2021-03-30T06:35:40Z|2021-03-30T06:36:00Z")
       {:ok, %Tempus.Slot{from: ~U[2021-03-30 06:35:40Z], to: ~U[2021-03-30 06:36:00Z]}}
+      iex> Tempus.Sigils.parse("foo|bar")
+      {:error, :invalid_format}
   """
   @spec parse(input :: binary()) :: {:ok, Slot.t()} | {:error, any()}
   def parse(input) do

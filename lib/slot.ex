@@ -269,7 +269,7 @@ defmodule Tempus.Slot do
   def join([slot | slots]), do: do_join(slots, wrap(slot))
 
   defp do_join([], acc), do: acc
-  defp do_join(any, %Slot{from: nil, to: nil}), do: any
+  defp do_join(any, %Slot{from: nil, to: nil}), do: join(any)
   defp do_join([%Slot{from: nil, to: nil} | slots], acc), do: do_join(slots, acc)
 
   defp do_join([slot | slots], acc) do
