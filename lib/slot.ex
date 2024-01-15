@@ -250,9 +250,35 @@ defmodule Tempus.Slot do
 
   ### Example
 
+      iex> Tempus.Slot.intersect([Tempus.Slot.id(), Tempus.Slot.id()])
+      Tempus.Slot.id()
+
+      iex> Tempus.Slot.intersect([~D|2020-09-30|, Tempus.Slot.id()])
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+
+      iex> Tempus.Slot.intersect([Tempus.Slot.id(), ~D|2020-09-30|])
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+
+      iex> Tempus.Slot.intersect([~D|2020-09-30|,
+      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}])
+      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+
+      iex> Tempus.Slot.intersect([~D|2020-09-30|,
+      ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}])
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:00:00Z]}
+
+      iex> Tempus.Slot.intersect([
+      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}, ~D|2020-09-30|])
+      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+
+      iex> Tempus.Slot.intersect([
+      ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}, ~D|2020-09-30|])
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:00:00Z]}
+
       iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
       ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
       %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
+
       iex> Tempus.Slot.intersect([~D|2020-09-30|, ~D|2000-09-30|,
       ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
       nil
@@ -262,8 +288,15 @@ defmodule Tempus.Slot do
       _slot, nil ->
         nil
 
+      slot, void() ->
+        wrap(slot)
+
+      void(), slot ->
+        wrap(slot)
+
       slot, acc ->
         slot = wrap(slot)
+        acc = wrap(acc)
 
         if disjoint?(acc, slot),
           do: nil,
@@ -289,18 +322,21 @@ defmodule Tempus.Slot do
 
   ### Example
 
+      iex> Tempus.Slot.join([])
+      Tempus.Slot.id()
+
       iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
       %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
 
       iex> Tempus.Slot.join([~D|2020-09-30|, ~D|2020-10-02|])
       %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
   """
-  def join([]), do: %Slot{from: nil, to: nil}
+  def join([]), do: void()
   def join([slot | slots]), do: do_join(slots, wrap(slot))
 
   defp do_join([], acc), do: acc
-  defp do_join(any, %Slot{from: nil, to: nil}), do: join(any)
-  defp do_join([%Slot{from: nil, to: nil} | slots], acc), do: do_join(slots, acc)
+  defp do_join(any, void()), do: join(any)
+  defp do_join([void() | slots], acc), do: do_join(slots, acc)
 
   defp do_join([slot | slots], acc) do
     slot = wrap(slot)
@@ -336,24 +372,33 @@ defmodule Tempus.Slot do
   """
   def join(s1, s2), do: join([s1, s2])
 
-  @spec duration(slot :: Slot.t(), unit :: System.time_unit()) :: non_neg_integer() | :infinity
+  @spec duration(slot :: Slot.origin(), unit :: System.time_unit()) ::
+          non_neg_integer() | :infinity
   @doc """
   Calculates the duration of a slot in units given as a second parameter
     (default: `:second`.)
 
   ### Example
 
-      iex> ~D|2020-09-03| |> Tempus.Slot.wrap() |> Tempus.Slot.duration()
+      iex> Tempus.Slot.duration(~D|2020-09-03|)
       86400
+      iex> Tempus.Slot.duration(Tempus.Slot.id())
+      0
+      iex> Tempus.Slot.duration(%Tempus.Slot{from: nil, to: DateTime.utc_now()})
+      :infinity
+      iex> Tempus.Slot.duration(%Tempus.Slot{from: DateTime.utc_now(), to: nil})
+      :infinity
   """
   def duration(slot, unit \\ :second)
+  def duration(slot, unit) when not is_struct(slot, Slot), do: slot |> wrap() |> duration(unit)
+  def duration(void(), _), do: 0
   def duration(%Slot{from: nil, to: %DateTime{}}, _), do: :infinity
   def duration(%Slot{from: %DateTime{}, to: nil}, _), do: :infinity
 
   def duration(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}, unit),
     do: to |> DateTime.add(1, unit) |> DateTime.diff(from, unit)
 
-  @spec compare(s1 :: t(), s2 :: t(), strict :: boolean()) :: :lt | :gt | :eq | :joint
+  @spec compare(s1 :: origin(), s2 :: origin(), strict :: boolean()) :: :lt | :gt | :eq | :joint
   @doc """
   Compares two slot structs.
 
@@ -361,8 +406,38 @@ defmodule Tempus.Slot do
   **NB** `:eq` is returned not only if slots are equal, but also when they are overlapped.
 
   Might be used in `Enum.sort/2`.
+
+  ### Examples
+
+      iex> slot = %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      iex> slot1 = %Tempus.Slot{from: nil, to: ~U[2020-09-30 00:00:00.000000Z]}
+      iex> slot2 = %Tempus.Slot{from: nil, to: DateTime.utc_now()}
+      iex> slot3 = %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: nil}
+      iex> slot4 = %Tempus.Slot{from: DateTime.utc_now(), to: nil}
+      iex> Tempus.Slot.compare(Tempus.Slot.id(), Tempus.Slot.id(), true)
+      :eq
+      iex> Tempus.Slot.compare(slot1, slot2, false)
+      :eq
+      iex> Tempus.Slot.compare(slot1, slot2, true)
+      :joint
+      iex> Tempus.Slot.compare(slot3, slot4, false)
+      :eq
+      iex> Tempus.Slot.compare(slot3, slot4, true)
+      :joint
+      iex> Tempus.Slot.compare(slot, slot, true)
+      :eq
+      iex> Tempus.Slot.compare(slot, DateTime.utc_now(), true)
+      :lt
+      iex> Tempus.Slot.compare(slot, ~D|2000-01-01|, true)
+      :gt
+      iex> Tempus.Slot.compare(slot, slot.from, true)
+      :joint
   """
   def compare(s1, s2, strict \\ false)
+
+  def compare(void(), void(), _), do: :eq
+  def compare(s1, s2, _) when is_coming_before(s1, s2), do: :lt
+  def compare(s1, s2, _) when is_coming_before(s2, s1), do: :gt
 
   def compare(%Slot{from: nil, to: %DateTime{}}, %Slot{from: nil, to: %DateTime{}}, false),
     do: :eq
