@@ -253,6 +253,14 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.intersect([Tempus.Slot.id(), Tempus.Slot.id()])
       Tempus.Slot.id()
 
+      iex> Tempus.Slot.intersect([%Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]},
+      ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}])
+      %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}
+
+      iex> Tempus.Slot.intersect([%Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil},
+      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}])
+      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}
+
       iex> Tempus.Slot.intersect([~D|2020-09-30|, Tempus.Slot.id()])
       %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:59:59.999999Z]}
 
@@ -488,12 +496,17 @@ defmodule Tempus.Slot do
 
   def compare(s1, s2, strict), do: compare(wrap(s1), wrap(s2), strict)
 
-  @spec strict_compare(s1 :: Slot.t(), s2 :: Slot.t()) :: :eq | :lt | :gt | :joint
+  @spec strict_compare(s1 :: Slot.origin(), s2 :: Slot.origin()) :: :eq | :lt | :gt | :joint
   @doc """
   Compares two slot structs. The same as `compare/2`, but returns `:joint` if
   the slots are overlapped.
+
+  ### Examples
+
+      iex> Tempus.Slot.strict_compare(~D|2020-01-01|, DateTime.utc_now())
+      :lt
   """
-  def strict_compare(%Slot{} = s1, %Slot{} = s2),
+  def strict_compare(s1, s2) when is_origin(s1) and is_origin(s2),
     do: compare(s1, s2, true)
 
   @spec wrap(origin(), DateTime.t()) :: Slot.t()
@@ -506,6 +519,8 @@ defmodule Tempus.Slot do
 
       iex> Tempus.Slot.wrap(~D|2020-08-06|)
       %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}
+      iex> Tempus.Slot.wrap(:ok)
+      Tempus.Slot.id()
   """
   def wrap(moment \\ nil, origin \\ DateTime.utc_now())
 
@@ -572,7 +587,7 @@ defmodule Tempus.Slot do
     }
   end
 
-  def wrap(_, _), do: %Slot{from: nil, to: nil}
+  def wrap(_, _), do: void()
 
   @doc false
   @spec shift(

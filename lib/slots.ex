@@ -45,6 +45,17 @@ defmodule Tempus.Slots do
 
   @doc """
   Creates an instance of slots, using a backend given as a parameter.
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      iex> slots = [
+      ...>   ~I(2000-01-01T00:00:00.000000Z → 2000-01-01T23:59:59.999999Z),
+      ...>   ~I(2010-01-01T00:00:00.000000Z → 2010-01-01T23:59:59.999999Z),
+      ...>   ~I(2020-01-01T00:00:00.000000Z → 2020-01-01T23:59:59.999999Z)
+      ...> ]
+      iex> Tempus.Slots.new([~D|2000-01-01|, ~D|2010-01-01|, ~D|2020-01-01|])
+      %Tempus.Slots{slots: Enum.into(slots, Tempus.Slots.List.new())}
   """
   def new(implementation \\ @implementation, data)
   def new(@implementation, %implementation{} = data), do: new(implementation, data)
@@ -58,17 +69,33 @@ defmodule Tempus.Slots do
   def size(%Slots{} = slots), do: count(slots)
 
   @spec count(t()) :: non_neg_integer()
-  @doc "Returns the number of slots"
+  @doc """
+  Returns the number of slots
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      iex> slots = [
+      ...>   ~I(2000-01-01T00:00:00.000000Z → 2000-01-01T23:59:59.999999Z),
+      ...>   ~I(2010-01-01T00:00:00.000000Z → 2010-01-01T23:59:59.999999Z),
+      ...>   ~I(2020-01-01T00:00:00.000000Z → 2020-01-01T23:59:59.999999Z)
+      ...> ]
+      iex> slots |> Tempus.Slots.new() |> Tempus.Slots.count()
+      3
+  """
   def count(%Slots{} = slots), do: Enum.count(slots)
 
   @spec identity(t()) :: container()
+
   @doc false
   def identity(%Slots{slots: slots}), do: %Slots{slots: Group.identity(slots)}
 
   @spec flatten(t(), keyword()) :: [Slot.t()]
+  @doc false
   def flatten(%Slots{slots: slots}, options \\ []), do: Group.flatten(slots, options)
 
   @spec split(t(), locator(), keyword()) :: {t(), t()}
+  @doc false
   def split(%Slots{slots: %implementation{} = slots}, origin, options \\ [])
       when is_locator(origin) do
     case Group.split(slots, origin, options) do

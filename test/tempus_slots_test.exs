@@ -19,6 +19,12 @@ defmodule Tempus.Slots.Test do
     [day_after_day_stream: day_after_day_stream, day_after_day_list: day_after_day_list]
   end
 
+  describe "Tempus.Slot" do
+    now = DateTime.utc_now()
+    assert %Tempus.Slot{from: from_to, to: from_to} = Tempus.Slot.wrap()
+    assert DateTime.diff(now, from_to) == 0
+  end
+
   describe "List.Group" do
     setup ctx do
       [input: ctx.day_after_day_list, slots: Slots.new(:list, ctx.day_after_day_list)]
