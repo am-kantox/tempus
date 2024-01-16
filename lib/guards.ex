@@ -185,14 +185,14 @@ defmodule Tempus.Guards do
   defguardp is_slot(term) when is_struct(term, Tempus.Slot)
 
   defguardp is_date_equal(d1, d2)
-            when is_date(d1) and is_date(d2) and
+            when (is_date(d1) or is_datetime(d1)) and (is_date(d2) or is_datetime(d2)) and
                    :erlang.map_get(:calendar, d1) == :erlang.map_get(:calendar, d2) and
                    :erlang.map_get(:year, d1) == :erlang.map_get(:year, d2) and
                    :erlang.map_get(:month, d1) == :erlang.map_get(:month, d2) and
                    :erlang.map_get(:day, d1) == :erlang.map_get(:day, d2)
 
   defguardp is_time_equal(t1, t2)
-            when is_time(t1) and is_time(t2) and
+            when (is_time(t1) or is_datetime(t1)) and (is_time(t2) or is_datetime(t2)) and
                    :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
                    :erlang.map_get(:hour, t1) == :erlang.map_get(:hour, t2) and
                    :erlang.map_get(:minute, t1) == :erlang.map_get(:minute, t2) and
@@ -341,7 +341,7 @@ defmodule Tempus.Guards do
       iex> is_slot_equal(s1, s3)
       false
       iex> s_bcn = ~U[2023-06-26T09:30:00Z]
-      ...> s_ny = DateTime.shift_zone(s_bcn, "America/New_York")
+      ...> {:ok, s_ny} = DateTime.shift_zone(s_bcn, "America/New_York")
       ...> is_slot_equal(Tempus.Slot.wrap(s_bcn), Tempus.Slot.wrap(s_ny))
       true
 
