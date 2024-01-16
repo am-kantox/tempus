@@ -44,6 +44,7 @@ defmodule Tempus.MixProject do
       {:telemetria, "~> 0.8", optional: true},
       {:avl_tree, "~> 1.0"},
       # dev / test
+      {:tzdata, "~> 1.0", only: [:dev, :test]},
       {:benchee, "~> 1.0", only: [:dev, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},

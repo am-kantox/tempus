@@ -12,13 +12,14 @@ defmodule Tempus.Slot do
   @typedoc "A timeslot to be used in `Tempus`"
   @type t :: %__MODULE__{
           from: nil | DateTime.t(),
-          to: nil | DateTime.t()
+          to: nil | DateTime.t(),
+          tz: Calendar.time_zone()
         }
 
   @typedoc "The origin used in comparisons and calculations"
   @type origin :: Slot.t() | Date.t() | DateTime.t() | Time.t() | nil
 
-  defstruct [:from, :to]
+  defstruct [:from, :to, tz: "Etc/UTC"]
 
   @spec new([{:from, origin()} | {:to, origin()}]) :: {:ok, t()} | {:error, any()}
   @doc """

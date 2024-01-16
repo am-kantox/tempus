@@ -43,6 +43,50 @@ defmodule Tempus.Guards do
   defguard is_locator(origin)
            when is_origin(origin) or is_function(origin, 1)
 
+  defp month_year_to_days(day, month, year) when year >= 1970 do
+    leap? = rem(year, 400) == 0 or rem(year, 4) == 0 and rem(year, 100) != 0
+    feb_days = if leap?, do: 29, else: 28
+    leaps_before = div(year - 1967, 4) # 0, 1, 1, 1, 1, 2, 2, ...
+    days_before =
+      case month do
+        1 -> 0
+        2 -> 31
+        3 -> 31 + feb_days
+        4 -> 31 + feb_days + 31
+        5 -> 31 + feb_days + 31 + 30
+        6 -> 31 + feb_days + 31 + 30 + 31
+        7 -> 31 + feb_days + 31 + 30 + 31 + 30
+        8 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31
+        9 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31
+        10 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30
+        11 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31
+        12 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
+      end
+    day + days_before + leaps_before + (year - 1970) * 365
+  end
+
+  defmacro to_unix(data) do
+    {:%{}, _, data} = Macro.expand(data, __CALLER__)
+
+    case Keyword.get(data, :calendar) do
+      {:__aliases__, _, [:Calendar, :ISO]} ->
+        {microsecond, ms_count} = Keyword.get(data, :microsecond, {0, 0})
+        second = Keyword.get(data, :second, 0)
+        minute = Keyword.get(data, :minute, 0)
+        hour = Keyword.get(data, :hour, 0)
+        day = Keyword.get(data, :day, 0)
+        month = Keyword.get(data, :month, 0)
+        year = Keyword.get(data, :year, 0)
+        offset = Keyword.get(data, :utc_offset, 0) + Keyword.get(data, :std_offset, 0)
+        seconds = second + offset + minute * 60 + hour * 60 * 60 + month_year_to_days(day, month, year) * 60 * 60 * 24
+
+        microseconds = Integer.pow(10, ms_count) * seconds + microsecond
+
+        quote do: unquote(microseconds)
+      _ -> 0
+    end
+  end
+
   defguardp is_date(term) when is_struct(term, Date)
   # defguardp is_time(term) when is_struct(term, Time)
   defguardp is_datetime(term) when is_struct(term, DateTime)
