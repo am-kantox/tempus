@@ -43,90 +43,170 @@ defmodule Tempus.Guards do
   defguard is_locator(origin)
            when is_origin(origin) or is_function(origin, 1)
 
-  leap? = fn year ->
-    rem(year, 400) == 0 or (rem(year, 4) == 0 and rem(year, 100) != 0)
-  end
+  @doc """
+  Returns `true` if the year is leap, and `false` otherwise.
 
-  @epoch_days (for year <- 1970..2070,
-                   leaps_before = 1970..(year - 1)//1 |> Enum.filter(leap?) |> Enum.count(),
-                   feb_days = if(leap?.(year), do: 29, else: 28),
-                   month <- 1..12,
-                   day <- 1..31,
-                   reduce: %{} do
-                 acc ->
-                   days_before =
-                     case month do
-                       1 -> 0
-                       2 -> 31
-                       3 -> 31 + feb_days
-                       4 -> 31 + feb_days + 31
-                       5 -> 31 + feb_days + 31 + 30
-                       6 -> 31 + feb_days + 31 + 30 + 31
-                       7 -> 31 + feb_days + 31 + 30 + 31 + 30
-                       8 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31
-                       9 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31
-                       10 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30
-                       11 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31
-                       12 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
-                     end
+  ## Examples
 
-                   put_in(
-                     acc,
-                     [Access.key(year, %{}), Access.key(month, %{}), Access.key(day, %{})],
-                     day + days_before + leaps_before + (year - 1970) * 365 - 1
-                   )
-               end)
+      iex> import Tempus.Guards, only: [is_leap: 1]
+      ...> is_leap(1970)
+      false
+      ...> is_leap(2000)
+      true
 
-  defmacro to_unix(data, unit \\ :second)
-
-  defmacro to_unix(data, :second) do
+  Allowed in guard tests. Inlined by the compiler.
+  """
+  defmacro is_leap(year) do
     quote do
-      :erlang.map_get(:second, unquote(data)) +
-        :erlang.map_get(:utc_offset, unquote(data)) +
-        :erlang.map_get(:std_offset, unquote(data)) +
-        :erlang.map_get(:minute, unquote(data)) * 60 +
-        :erlang.map_get(:hour, unquote(data)) * 60 * 60 +
-        :erlang.map_get(
-          :erlang.map_get(:day, unquote(data)),
-          :erlang.map_get(
-            :erlang.map_get(:month, unquote(data)),
-            :erlang.map_get(
-              :erlang.map_get(:year, unquote(data)),
-              unquote(Macro.escape(@epoch_days))
-            )
-          )
-        ) * 60 * 60 * 24
+      rem(unquote(year), 400) == 0 or
+        (rem(unquote(year), 4) == 0 and rem(unquote(year), 100) != 0)
     end
   end
 
-  defmacro to_unix(data, :microsecond) do
+  @anno_domini Application.compile_env(:tempus, :anno_domini, 1970)
+  @apocalypse Application.compile_env(:tempus, :apocalypse, 2070)
+  @month_justifier %{
+    1 => 1,
+    2 => 1,
+    3 => 0,
+    4 => 0,
+    5 => 0,
+    6 => 0,
+    7 => 0,
+    8 => 0,
+    9 => 0,
+    10 => 0,
+    11 => 0,
+    12 => 0
+  }
+  @month_adder %{
+    1 => 0,
+    2 => 31,
+    3 => 31 + 28,
+    4 => 31 + 28 + 31,
+    5 => 31 + 28 + 31 + 30,
+    6 => 31 + 28 + 31 + 30 + 31,
+    7 => 31 + 28 + 31 + 30 + 31 + 30,
+    8 => 31 + 28 + 31 + 30 + 31 + 30 + 31,
+    9 => 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31,
+    10 => 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31 + 30,
+    11 => 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31,
+    12 => 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
+  }
+  @leap_days_before_epoch div(@anno_domini, 4) - div(@anno_domini, 100) + div(@anno_domini, 400)
+
+  @microseconds_multiplier Map.new(0..9, &{&1, Integer.pow(10, &1)})
+
+  @doc """
+  Macro to convert the `DateTime` struct to epoch.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [to_unix: 2]
+      ...> dt = DateTime.utc_now()
+      ...> to_unix(dt, :second) == DateTime.to_unix(dt, :second)
+      true
+      ...> to_unix(dt, :millisecond) == DateTime.to_unix(dt, :millisecond)
+      true
+      ...> to_unix(dt, :microsecond) == DateTime.to_unix(dt, :microsecond)
+      true
+      ...> to_unix(~U[2024-01-16 14:50:59.787204Z], :microsecond)
+      1705416659787204
+
+  Allowed in guard tests. Inlined by the compiler.
+  """
+  defmacro to_unix(data, unit \\ :microsecond)
+
+  defmacro to_unix(data, :second) do
     quote do
-      :erlang.element(1, :erlang.map_get(:microsecond, unquote(data))) +
-        :math.pow(10, :erlang.element(2, :erlang.map_get(:microsecond, unquote(data)))) *
+      :erlang.map_get(:year, unquote(data)) >= unquote(@anno_domini) and
+        :erlang.map_get(:year, unquote(data)) <= unquote(@apocalypse) and
+        :erlang.map_get(:second, unquote(data)) -
+          :erlang.map_get(:utc_offset, unquote(data)) -
+          :erlang.map_get(:std_offset, unquote(data)) +
+          :erlang.map_get(:minute, unquote(data)) * 60 +
+          :erlang.map_get(:hour, unquote(data)) * 3600 +
+          (div(
+             :erlang.map_get(:year, unquote(data)) -
+               :erlang.map_get(
+                 :erlang.map_get(:month, unquote(data)),
+                 unquote(Macro.escape(@month_justifier))
+               ),
+             4
+           ) -
+             div(
+               :erlang.map_get(:year, unquote(data)) -
+                 :erlang.map_get(
+                   :erlang.map_get(:month, unquote(data)),
+                   unquote(Macro.escape(@month_justifier))
+                 ),
+               100
+             ) +
+             div(
+               :erlang.map_get(:year, unquote(data)) -
+                 :erlang.map_get(
+                   :erlang.map_get(:month, unquote(data)),
+                   unquote(Macro.escape(@month_justifier))
+                 ),
+               400
+             ) - unquote(@leap_days_before_epoch)) * 86_400 +
+          (:erlang.map_get(:day, unquote(data)) - 1) * 86_400 +
+          :erlang.map_get(
+            :erlang.map_get(:month, unquote(data)),
+            unquote(Macro.escape(@month_adder))
+          ) * 86_400 +
+          (:erlang.map_get(:year, unquote(data)) - unquote(@anno_domini)) * 31_536_000
+    end
+  end
+
+  defmacro to_unix(data, precision)
+           when is_integer(precision) and precision >= 0 and precision <= 6 do
+    quote do
+      div(
+        :erlang.element(1, :erlang.map_get(:microsecond, unquote(data))),
+        :erlang.map_get(6 - unquote(precision), unquote(Macro.escape(@microseconds_multiplier)))
+      ) +
+        :erlang.map_get(unquote(precision), unquote(Macro.escape(@microseconds_multiplier))) *
           to_unix(unquote(data), :second)
     end
   end
 
+  defmacro to_unix(data, :millisecond) do
+    quote do: to_unix(unquote(data), 3)
+  end
+
+  defmacro to_unix(data, :microsecond) do
+    quote do: to_unix(unquote(data), 6)
+  end
+
   defguardp is_date(term) when is_struct(term, Date)
-  # defguardp is_time(term) when is_struct(term, Time)
+  defguardp is_time(term) when is_struct(term, Time)
   defguardp is_datetime(term) when is_struct(term, DateTime)
   defguardp is_slot(term) when is_struct(term, Tempus.Slot)
 
   defguardp is_date_equal(d1, d2)
-            when :erlang.map_get(:calendar, d1) == :erlang.map_get(:calendar, d2) and
+            when is_date(d1) and is_date(d2) and
+                   :erlang.map_get(:calendar, d1) == :erlang.map_get(:calendar, d2) and
                    :erlang.map_get(:year, d1) == :erlang.map_get(:year, d2) and
                    :erlang.map_get(:month, d1) == :erlang.map_get(:month, d2) and
                    :erlang.map_get(:day, d1) == :erlang.map_get(:day, d2)
 
   defguardp is_time_equal(t1, t2)
-            when :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
+            when is_time(t1) and is_time(t2) and
+                   :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
                    :erlang.map_get(:hour, t1) == :erlang.map_get(:hour, t2) and
                    :erlang.map_get(:minute, t1) == :erlang.map_get(:minute, t2) and
                    :erlang.map_get(:second, t1) == :erlang.map_get(:second, t2) and
                    elem(:erlang.map_get(:microsecond, t1), 0) ==
                      elem(:erlang.map_get(:microsecond, t2), 0)
 
-  defguardp is_datetime_equal(dt1, dt2) when is_date_equal(dt1, dt2) and is_time_equal(dt1, dt2)
+  defguardp is_timezone_not_equal(dt1, dt2)
+            when is_datetime(dt1) and is_datetime(dt2) and
+                   :erlang.map_get(:time_zone, dt1) != :erlang.map_get(:time_zone, dt2)
+
+  defguardp is_datetime_equal(dt1, dt2)
+            when (is_timezone_not_equal(dt1, dt2) and to_unix(dt1) == to_unix(dt2)) or
+                   (is_date_equal(dt1, dt2) and is_time_equal(dt1, dt2))
 
   defguardp is_microsecond_coming_before(m1, m2) when elem(m1, 0) < elem(m2, 0)
 
@@ -157,13 +237,12 @@ defmodule Tempus.Guards do
 
   defguardp is_datetime_coming_before(dt1, dt2)
             when is_datetime(dt1) and is_datetime(dt2) and
-                   (is_date_coming_before(dt1, dt2) or
+                   ((is_timezone_not_equal(dt1, dt2) and to_unix(dt1) < to_unix(dt2)) or
+                      is_date_coming_before(dt1, dt2) or
                       (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))
 
   defguardp is_slot_coming_before(s1, s2)
-            when is_datetime(:erlang.map_get(:to, s1)) and
-                   is_datetime(:erlang.map_get(:from, s2)) and
-                   is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
+            when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
 
   defguardp is_datetime_between(dt, dt1, dt2)
             when (is_nil(dt1) and is_datetime(dt2) and not is_datetime_coming_before(dt2, dt)) or
@@ -261,6 +340,10 @@ defmodule Tempus.Guards do
       true
       iex> is_slot_equal(s1, s3)
       false
+      iex> s_bcn = ~U[2023-06-26T09:30:00Z]
+      ...> s_ny = DateTime.shift_zone(s_bcn, "America/New_York")
+      ...> is_slot_equal(Tempus.Slot.wrap(s_bcn), Tempus.Slot.wrap(s_ny))
+      true
 
   """
   @spec is_slot_equal(Slot.t(), Slot.t()) :: boolean()
@@ -312,6 +395,10 @@ defmodule Tempus.Guards do
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_covered(s1, s2)
       false
+      iex> s_bcn = ~U[2023-06-26T09:30:00Z]
+      ...> s_ny = ~D|2023-06-26| |> Tempus.Slot.wrap() |> Tempus.Slot.shift_tz("America/New_York")
+      ...> is_covered(s_bcn, s_ny)
+      true
   """
   @spec is_covered(Slot.origin(), Slot.t()) :: boolean()
   defguard is_covered(o, s)
@@ -329,6 +416,10 @@ defmodule Tempus.Guards do
       true
       iex> is_coming_before(~D[2023-04-10], ~D[2023-04-10])
       false
+      iex> s_bcn = ~U[2023-06-26T09:30:00Z]
+      ...> s_ny = ~D|2024-06-26| |> Tempus.Slot.wrap() |> Tempus.Slot.shift_tz("America/New_York")
+      ...> is_coming_before(s_bcn, s_ny)
+      true
   """
   @spec is_coming_before(Date.t() | DateTime.t(), Date.t() | DateTime.t()) :: boolean()
   @spec is_coming_before(Slot.t(), Slot.t()) :: boolean()
