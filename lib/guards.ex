@@ -43,47 +43,67 @@ defmodule Tempus.Guards do
   defguard is_locator(origin)
            when is_origin(origin) or is_function(origin, 1)
 
-  defp month_year_to_days(day, month, year) when year >= 1970 do
-    leap? = rem(year, 400) == 0 or rem(year, 4) == 0 and rem(year, 100) != 0
-    feb_days = if leap?, do: 29, else: 28
-    leaps_before = div(year - 1967, 4) # 0, 1, 1, 1, 1, 2, 2, ...
-    days_before =
-      case month do
-        1 -> 0
-        2 -> 31
-        3 -> 31 + feb_days
-        4 -> 31 + feb_days + 31
-        5 -> 31 + feb_days + 31 + 30
-        6 -> 31 + feb_days + 31 + 30 + 31
-        7 -> 31 + feb_days + 31 + 30 + 31 + 30
-        8 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31
-        9 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31
-        10 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30
-        11 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31
-        12 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
-      end
-    day + days_before + leaps_before + (year - 1970) * 365
+  leap? = fn year ->
+    rem(year, 400) == 0 or (rem(year, 4) == 0 and rem(year, 100) != 0)
   end
 
-  defmacro to_unix(data) do
-    {:%{}, _, data} = Macro.expand(data, __CALLER__)
+  @epoch_days (for year <- 1970..2070,
+                   leaps_before = 1970..(year - 1)//1 |> Enum.filter(leap?) |> Enum.count(),
+                   feb_days = if(leap?.(year), do: 29, else: 28),
+                   month <- 1..12,
+                   day <- 1..31,
+                   reduce: %{} do
+                 acc ->
+                   days_before =
+                     case month do
+                       1 -> 0
+                       2 -> 31
+                       3 -> 31 + feb_days
+                       4 -> 31 + feb_days + 31
+                       5 -> 31 + feb_days + 31 + 30
+                       6 -> 31 + feb_days + 31 + 30 + 31
+                       7 -> 31 + feb_days + 31 + 30 + 31 + 30
+                       8 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31
+                       9 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31
+                       10 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30
+                       11 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31
+                       12 -> 31 + feb_days + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
+                     end
 
-    case Keyword.get(data, :calendar) do
-      {:__aliases__, _, [:Calendar, :ISO]} ->
-        {microsecond, ms_count} = Keyword.get(data, :microsecond, {0, 0})
-        second = Keyword.get(data, :second, 0)
-        minute = Keyword.get(data, :minute, 0)
-        hour = Keyword.get(data, :hour, 0)
-        day = Keyword.get(data, :day, 0)
-        month = Keyword.get(data, :month, 0)
-        year = Keyword.get(data, :year, 0)
-        offset = Keyword.get(data, :utc_offset, 0) + Keyword.get(data, :std_offset, 0)
-        seconds = second + offset + minute * 60 + hour * 60 * 60 + month_year_to_days(day, month, year) * 60 * 60 * 24
+                   put_in(
+                     acc,
+                     [Access.key(year, %{}), Access.key(month, %{}), Access.key(day, %{})],
+                     day + days_before + leaps_before + (year - 1970) * 365 - 1
+                   )
+               end)
 
-        microseconds = Integer.pow(10, ms_count) * seconds + microsecond
+  defmacro to_unix(data, unit \\ :second)
 
-        quote do: unquote(microseconds)
-      _ -> 0
+  defmacro to_unix(data, :second) do
+    quote do
+      :erlang.map_get(:second, unquote(data)) +
+        :erlang.map_get(:utc_offset, unquote(data)) +
+        :erlang.map_get(:std_offset, unquote(data)) +
+        :erlang.map_get(:minute, unquote(data)) * 60 +
+        :erlang.map_get(:hour, unquote(data)) * 60 * 60 +
+        :erlang.map_get(
+          :erlang.map_get(:day, unquote(data)),
+          :erlang.map_get(
+            :erlang.map_get(:month, unquote(data)),
+            :erlang.map_get(
+              :erlang.map_get(:year, unquote(data)),
+              unquote(Macro.escape(@epoch_days))
+            )
+          )
+        ) * 60 * 60 * 24
+    end
+  end
+
+  defmacro to_unix(data, :microsecond) do
+    quote do
+      :erlang.element(1, :erlang.map_get(:microsecond, unquote(data))) +
+        :math.pow(10, :erlang.element(2, :erlang.map_get(:microsecond, unquote(data)))) *
+          to_unix(unquote(data), :second)
     end
   end
 
