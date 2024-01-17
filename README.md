@@ -13,7 +13,7 @@ end
 ```
 
 ## Changelog
-- **`0.12.0`** — [:tada:] timezones and more guards exported
+- **`0.12.1`** — [:tada:] timezones and more guards exported
 - **`0.11.0`** — [:books:] better coverage
 - **`0.10.2`** — [:ant:] `add/4` and tests for it: fixed
 - **`0.10.1`** — [:ant:] `split/4` and tests for it: fixed
