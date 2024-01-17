@@ -64,7 +64,6 @@ defmodule Tempus.Guards do
   end
 
   @anno_domini Application.compile_env(:tempus, :anno_domini, 1970)
-  @apocalypse Application.compile_env(:tempus, :apocalypse, 2070)
   @month_justifier %{
     1 => 1,
     2 => 1,
@@ -98,7 +97,11 @@ defmodule Tempus.Guards do
   @microseconds_multiplier Map.new(0..9, &{&1, Integer.pow(10, &1)})
 
   @doc """
-  Macro to convert the `DateTime` struct to epoch.
+  Macro to convert the `DateTime` struct to epoch. Unlike `DateTime.to_unix/2`,
+    it does not support different `Calendar`s but `Calendar.ISO`, and it does not
+    support negative epoch times.
+
+  It although supports timezones and can be used in guards.
 
   ### Examples
 
@@ -120,7 +123,6 @@ defmodule Tempus.Guards do
   defmacro to_unix(data, :second) do
     quote do
       :erlang.map_get(:year, unquote(data)) >= unquote(@anno_domini) and
-        :erlang.map_get(:year, unquote(data)) <= unquote(@apocalypse) and
         :erlang.map_get(:second, unquote(data)) -
           :erlang.map_get(:utc_offset, unquote(data)) -
           :erlang.map_get(:std_offset, unquote(data)) +
@@ -179,39 +181,101 @@ defmodule Tempus.Guards do
     quote do: to_unix(unquote(data), 6)
   end
 
-  defguardp is_date(term) when is_struct(term, Date)
-  defguardp is_time(term) when is_struct(term, Time)
-  defguardp is_datetime(term) when is_struct(term, DateTime)
-  defguardp is_slot(term) when is_struct(term, Tempus.Slot)
+  @doc """
+  Syntactic sugar for `is_struct(term, Date)`.
+  """
+  defguard is_date(term) when is_struct(term, Date)
+
+  @doc """
+  Syntactic sugar for `is_struct(term, Time)`.
+  """
+  defguard is_time(term) when is_struct(term, Time)
+
+  @doc """
+  Syntactic sugar for `is_struct(term, DateTime)`.
+  """
+  defguard is_datetime(term) when is_struct(term, DateTime)
+
+  @doc """
+  Syntactic sugar for `is_struct(term, Tempus.Slot)`.
+  """
+  defguard is_slot(term) when is_struct(term, Tempus.Slot)
+
+  defguardp is_like_date(d)
+            when is_map(d) and is_map_key(d, :calendar) and is_map_key(d, :year) and
+                   is_map_key(d, :month) and is_map_key(d, :day)
+
+  defguardp is_like_time(t)
+            when is_map(t) and is_map_key(t, :calendar) and is_map_key(t, :hour) and
+                   is_map_key(t, :minute) and is_map_key(t, :second) and
+                   is_map_key(t, :microsecond) and is_tuple(:erlang.map_get(:microsecond, t))
+
+  defguardp is_same_calendar(c1, c2)
+            when :erlang.map_get(:calendar, c1) == :erlang.map_get(:calendar, c2)
+
+  # Checks two structs passed as parameters for pointing to the same `Date`.
+  #
+  #     iex> import Tempus.Guards, only: [is_date_equal: 2]
+  #     ...> is_date_equal(~D|2000-01-01|, ~U|2000-01-01T12:00:00Z|)
+  #     true
+  #     iex> is_date_equal(~U|2000-01-01T12:00:00Z|, ~D|1970-01-01|)
+  #     false
+  #
+  # This guard is not exposed because it’s prone to date-like objects in different timezones
 
   defguardp is_date_equal(d1, d2)
-            when (is_date(d1) or is_datetime(d1)) and (is_date(d2) or is_datetime(d2)) and
-                   :erlang.map_get(:calendar, d1) == :erlang.map_get(:calendar, d2) and
+            when is_like_date(d1) and is_like_date(d2) and
+                   is_same_calendar(d1, d2) and
                    :erlang.map_get(:year, d1) == :erlang.map_get(:year, d2) and
                    :erlang.map_get(:month, d1) == :erlang.map_get(:month, d2) and
                    :erlang.map_get(:day, d1) == :erlang.map_get(:day, d2)
 
+  # Checks two structs passed as parameters for pointing to the same `Time`.
+  #
+  #     iex> import Tempus.Guards, only: [is_time_equal: 2]
+  #     ...> is_time_equal(~U|1970-01-01T12:00:00Z|, ~U|2000-01-01T12:00:00Z|)
+  #     true
+  #     iex> is_date_equal(~U|2000-01-01T12:00:00Z|, ~T|23:59:59|)
+  #     false
+  #
+  # This guard is not exposed because it’s prone to time-like objects in different timezones
+
   defguardp is_time_equal(t1, t2)
-            when (is_time(t1) or is_datetime(t1)) and (is_time(t2) or is_datetime(t2)) and
-                   :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
+            when is_like_time(t1) and is_like_time(t2) and
+                   is_same_calendar(t1, t2) and
                    :erlang.map_get(:hour, t1) == :erlang.map_get(:hour, t2) and
                    :erlang.map_get(:minute, t1) == :erlang.map_get(:minute, t2) and
                    :erlang.map_get(:second, t1) == :erlang.map_get(:second, t2) and
                    elem(:erlang.map_get(:microsecond, t1), 0) ==
                      elem(:erlang.map_get(:microsecond, t2), 0)
 
-  defguardp is_timezone_not_equal(dt1, dt2)
-            when is_datetime(dt1) and is_datetime(dt2) and
-                   :erlang.map_get(:time_zone, dt1) != :erlang.map_get(:time_zone, dt2)
+  defguardp is_timezone_equal(dt1, dt2)
+            when :erlang.map_get(:time_zone, dt1) == :erlang.map_get(:time_zone, dt2)
 
-  defguardp is_datetime_equal(dt1, dt2)
-            when (is_timezone_not_equal(dt1, dt2) and to_unix(dt1) == to_unix(dt2)) or
-                   (is_date_equal(dt1, dt2) and is_time_equal(dt1, dt2))
+  @doc """
+  Guard to validate if two `DateTime` instances passed as parameters for pointing to the same `DateTime`.
+  If arguments have different timezones, returns a meaningful value for positive unix epoch only.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_datetime_equal: 2]
+      ...> is_datetime_equal(~U|2020-01-01T12:00:00Z|,
+      ...>     DateTime.shift_zone!(~U|2020-01-01T12:00:00Z|, "Australia/Sydney"))
+      true
+      iex> is_datetime_equal(~U|2000-01-01T12:00:00Z|, ~U|2000-01-01T23:59:59Z|)
+      false
+  """
+  defguard is_datetime_equal(dt1, dt2)
+           when (is_datetime(dt1) and is_datetime(dt2) and
+                   (not is_timezone_equal(dt1, dt2) and to_unix(dt1) == to_unix(dt2))) or
+                  (is_timezone_equal(dt1, dt2) and is_date_equal(dt1, dt2) and
+                     is_time_equal(dt1, dt2))
 
   defguardp is_microsecond_coming_before(m1, m2) when elem(m1, 0) < elem(m2, 0)
 
+  # This guard is not exposed because it’s prone to date-like objects in different timezones
   defguardp is_date_coming_before(d1, d2)
-            when :erlang.map_get(:calendar, d1) == :erlang.map_get(:calendar, d2) and
+            when is_like_date(d1) and is_like_date(d2) and is_same_calendar(d1, d2) and
                    (:erlang.map_get(:year, d1) < :erlang.map_get(:year, d2) or
                       (:erlang.map_get(:year, d1) == :erlang.map_get(:year, d2) and
                          :erlang.map_get(:month, d1) < :erlang.map_get(:month, d2)) or
@@ -219,6 +283,7 @@ defmodule Tempus.Guards do
                          :erlang.map_get(:month, d1) == :erlang.map_get(:month, d2) and
                          :erlang.map_get(:day, d1) < :erlang.map_get(:day, d2)))
 
+  # This guard is not exposed because it’s prone to time-like objects in different timezones
   defguardp is_time_coming_before(t1, t2)
             when :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
                    (:erlang.map_get(:hour, t1) < :erlang.map_get(:hour, t2) or
@@ -235,14 +300,49 @@ defmodule Tempus.Guards do
                            :erlang.map_get(:microsecond, t2)
                          )))
 
-  defguardp is_datetime_coming_before(dt1, dt2)
-            when is_datetime(dt1) and is_datetime(dt2) and
-                   ((is_timezone_not_equal(dt1, dt2) and to_unix(dt1) < to_unix(dt2)) or
-                      is_date_coming_before(dt1, dt2) or
-                      (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))
+  @doc """
+  Guard to validate if two `DateTime` instances passed as parameters if the former one
+    is less (comes earlier) than the latter one.
 
-  defguardp is_slot_coming_before(s1, s2)
-            when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
+  If arguments have different timezones, returns a meaningful value for positive unix epoch only.
+
+  If arguments are not datetimes, or timezones differ and values are before epoch, returns `false`.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_datetime_coming_before: 2]
+      ...> is_datetime_coming_before(~U|2020-01-01T12:00:00Z|,
+      ...>     DateTime.shift_zone!(~U|2020-01-01T12:00:00Z|, "Australia/Sydney"))
+      false
+      iex> is_datetime_coming_before(~U|2000-01-01T12:00:00Z|, ~U|2000-01-01T23:59:59Z|)
+      true
+  """
+  defguard is_datetime_coming_before(dt1, dt2)
+           when is_datetime(dt1) and is_datetime(dt2) and
+                  ((not is_timezone_equal(dt1, dt2) and to_unix(dt1) < to_unix(dt2)) or
+                     (is_timezone_equal(dt1, dt2) and
+                        (is_date_coming_before(dt1, dt2) or
+                           (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))))
+
+  @doc """
+  Guard to validate if two `Tempus.Slot` instances passed as parameters if the former one
+    is less (comes earlier) than the latter one.
+
+  If arguments have different timezones, returns a meaningful value for positive unix epoch only.
+
+  If arguments are not slots, or timezones differ and values are before epoch, returns `false`.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_slot_coming_before: 2]
+      ...> slot = Tempus.Slot.wrap(~U|2020-01-01T12:00:00Z|)
+      ...> is_slot_coming_before(slot, Tempus.Slot.shift_tz(slot, "Australia/Sydney"))
+      false
+      ...> is_slot_coming_before(slot, Tempus.Slot.wrap(~U|2020-01-01T23:59:59Z|))
+      true
+  """
+  defguard is_slot_coming_before(s1, s2)
+           when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
 
   defguardp is_datetime_between(dt, dt1, dt2)
             when (is_nil(dt1) and is_datetime(dt2) and not is_datetime_coming_before(dt2, dt)) or
@@ -251,14 +351,40 @@ defmodule Tempus.Guards do
                       not is_datetime_coming_before(dt, dt1) and
                       not is_datetime_coming_before(dt2, dt))
 
-  defguardp is_datetime_covered(dt, s)
-            when is_slot(s) and
-                   is_datetime_between(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
+  @doc """
+  Guard to validate if the `DateTime` instance passed as a first argument is covered by the slot.
 
-  defguardp is_slot_covered(s1, s2)
-            when is_slot(s1) and is_slot(s2) and
-                   is_datetime_covered(:erlang.map_get(:from, s1), s2) and
-                   is_datetime_covered(:erlang.map_get(:to, s1), s2)
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_datetime_covered: 2]
+      ...> slot = Tempus.slot!(~U|2020-01-01T12:00:00Z|, ~U|2020-01-01T23:59:59Z|)
+      ...> is_datetime_covered(~U|2020-01-01T18:00:00Z|, slot)
+      true
+      ...> is_datetime_covered(~U|2020-01-01T06:00:00Z|, slot)
+      false
+  """
+  defguard is_datetime_covered(dt, s)
+           when is_slot(s) and
+                  is_datetime_between(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
+
+  @doc """
+  Guard to validate if the slot instance passed as a first argument is covered by the slot passed last.
+
+  ### Examples
+
+      iex> import Tempus.Guards, only: [is_slot_covered: 2]
+      ...> slot = Tempus.slot!(~U|2020-01-01T12:00:00Z|, ~U|2020-01-01T23:59:59Z|)
+      ...> covering = Tempus.Slot.wrap(~D|2020-01-01|)
+      ...> joint = Tempus.slot!(~U|2020-01-01T06:00:00Z|, ~U|2020-01-01T18:00:00Z|)
+      ...> is_slot_covered(slot, covering)
+      true
+      iex> is_slot_covered(slot, joint)
+      false
+  """
+  defguard is_slot_covered(s1, s2)
+           when is_slot(s1) and is_slot(s2) and
+                  is_datetime_covered(:erlang.map_get(:from, s1), s2) and
+                  is_datetime_covered(:erlang.map_get(:to, s1), s2)
 
   defguardp is_slot_from_equal(s, dt)
             when is_slot(s) and is_datetime_equal(dt, :erlang.map_get(:from, s))
@@ -399,8 +525,12 @@ defmodule Tempus.Guards do
       ...> s_ny = ~D|2023-06-26| |> Tempus.Slot.wrap() |> Tempus.Slot.shift_tz("America/New_York")
       ...> is_covered(s_bcn, s_ny)
       true
+      iex> s_bcn = ~D[2023-06-26]
+      ...> s_ny = Tempus.slot!(~D|2023-06-26|, ~D|2023-06-27|) |> Tempus.Slot.shift_tz("America/New_York")
+      ...> is_covered(s_bcn, s_ny)
+      false
   """
-  @spec is_covered(Slot.origin(), Slot.t()) :: boolean()
+  @spec is_covered(Slot.t() | DateTime.t(), Slot.t()) :: boolean()
   defguard is_covered(o, s)
            when is_slot(s) and
                   ((is_slot(o) and is_slot_covered(o, s)) or
