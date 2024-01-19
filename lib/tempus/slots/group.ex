@@ -19,7 +19,7 @@ defprotocol Tempus.Slots.Group do
   def flatten(slots, options \\ [])
 
   @doc """
-  Adds a single `t:Slot.t()` instance to this `t:Slots.t(t())`
+  Adds a single `t:Slot.t/0` instance to this `t:Slots.t/1` (which is effectively `Slots.t(t())`)
     implementation. If `merge/3` implementation returns `{:error, __MODULE__}`,
     this function would be used to add elements one by one through `reduce/3`.
   """
