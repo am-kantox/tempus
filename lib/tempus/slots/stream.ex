@@ -336,7 +336,7 @@ defmodule Tempus.Slots.Stream do
   defp collect_joint(%Slot{} = value, fun, join) do
     %Slot{} = next = fun.(value)
 
-    if not is_coming_before(value, next),
+    if not is_slot_coming_before(value, next),
       do: raise(ArgumentError, "Stream values must be increasing")
 
     if joint_in_delta?(value, next, join) do

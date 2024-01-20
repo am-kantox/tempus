@@ -85,10 +85,10 @@ defmodule Tempus.Slots.List do
 
   defp do_add(jid, slot, head, [th | tail]) do
     cond do
-      is_coming_before(slot, th) and not joint_in_delta?(slot, th, jid) ->
+      is_slot_coming_before(slot, th) and not joint_in_delta?(slot, th, jid) ->
         Enum.reverse(head) ++ [slot, th | tail]
 
-      is_coming_before(th, slot) and not joint_in_delta?(th, slot, jid) ->
+      is_slot_coming_before(th, slot) and not joint_in_delta?(th, slot, jid) ->
         do_add(jid, slot, [th | head], tail)
 
       true ->

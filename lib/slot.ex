@@ -148,8 +148,8 @@ defmodule Tempus.Slot do
       [Tempus.Slot.new!(~U[2023-04-12 11:00:00Z], ~U[2023-04-12 13:00:00Z])]
   """
   @spec xor(outer :: Slot.t(), inner :: Slot.t()) :: [Slot.t()]
-  def xor(outer, inner) when is_coming_before(outer, inner), do: [outer, inner]
-  def xor(outer, inner) when is_coming_before(inner, outer), do: [inner, outer]
+  def xor(outer, inner) when is_slot_coming_before(outer, inner), do: [outer, inner]
+  def xor(outer, inner) when is_slot_coming_before(inner, outer), do: [inner, outer]
 
   def xor(outer, inner) when is_slot_border(inner.from, outer) or is_slot_border(inner.to, outer),
     do: [Slot.join(inner, outer)]
@@ -618,6 +618,7 @@ defmodule Tempus.Slot do
   end
 
   defp check_shifted(from, to) when not is_coming_before(to, from), do: %Slot{from: from, to: to}
+
   defp check_shifted(_, _), do: void()
 
   @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
@@ -664,10 +665,11 @@ defmodule Tempus.Slot do
 
   @spec gap([t()]) :: t()
   @doc false
-  def gap([%Slot{to: from} = prev, %Slot{from: to} = next]) when is_coming_before(prev, next),
-    do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
+  def gap([%Slot{to: from} = prev, %Slot{from: to} = next])
+      when is_slot_coming_before(prev, next),
+      do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
 
-  def gap([prev, next]) when is_coming_before(next, prev), do: gap([next, prev])
+  def gap([prev, next]) when is_slot_coming_before(next, prev), do: gap([next, prev])
   def gap([%Slot{from: nil, to: from}]), do: shift(%Slot{from: from, to: nil}, from: 1)
   def gap([%Slot{from: to, to: nil}]), do: shift(%Slot{from: nil, to: to}, to: -1)
   def gap(_), do: void()
