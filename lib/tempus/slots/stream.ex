@@ -163,7 +163,7 @@ defmodule Tempus.Slots.Stream do
 
     split = fn slot, slots, jid ->
       head_splitter =
-        if jid do
+        if is_integer(jid) do
           &(is_coming_before(&1, slot) and not joint_in_delta?(&1, slot, jid))
         else
           &is_coming_before(&1, slot)
@@ -222,7 +222,7 @@ defmodule Tempus.Slots.Stream do
 
       {e1, e2, idx}, {_, %Slots.List{slots: []}} ->
         cond do
-          jid && joint_in_delta?(e1, e2, jid) ->
+          is_integer(jid) && joint_in_delta?(e1, e2, jid) ->
             {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
 
           is_coming_before(e1, e2) ->
@@ -315,32 +315,60 @@ defmodule Tempus.Slots.Stream do
   Produces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
     of elements emitted.
 
-  By default, slots will be joined if they are 1μsec aside.
+  ### Options
+
+  - `join` (_default:_ `false`) — `nil | boolean() | non_neg_integer()` specifies how
+    slots are to be joined
+  - `return_as` (_default:_ `:stream`) — `:stream | :slots` if slots, the function returns
+    the `t:Tempus.Slots.t/0` instance backed up by produced `t:Temput.Slots.Stream.t/0`
+
+  By default, slots will not be joined. Pass `true` to join if they are 1μsec aside,
+    or an integer specifying the number of μsecs to join.
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      ...> Tempus.Slots.Stream.iterate(~D|2024-01-20|,
+      ...>   &Tempus.Slot.shift(&1, by: rem(&1.from.day, 2) + 1, unit: :day),
+      ...>   join: true) |> Enum.take(2)
+      [~I(2024-01-20T00:00:00.000000Z → 2024-01-21T23:59:59.999999Z),
+       ~I(2024-01-23T00:00:00.000000Z → 2024-01-23T23:59:59.999999Z)]
   """
-  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), keyword()) :: Slots.Stream.t()
+  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), keyword()) :: Slots.Stream.t() | Slots.t()
   def iterate(start_value, next_fun, options \\ []) do
     next_fun = &(&1 |> next_fun.() |> Slot.wrap())
     jid = pop_jid(options)
 
     stream =
-      Stream.unfold(Slot.wrap(start_value), fn
+      start_value
+      |> Slot.wrap()
+      |> Stream.unfold(fn
         %Slot{} = value ->
-          if jid,
+          if is_integer(jid),
             do: collect_joint(value, next_fun, jid),
             else: {value, next_fun.(value)}
       end)
+      |> then(&%Slots.Stream{slots: &1})
 
-    %Slots.Stream{slots: stream}
+    case Keyword.get(options, :return_as, :stream) do
+      :stream -> stream
+      :slots -> %Slots{slots: stream}
+    end
   end
 
   defp collect_joint(%Slot{} = value, fun, join) do
     %Slot{} = next = fun.(value)
 
-    if not is_slot_coming_before(value, next),
-      do: raise(ArgumentError, "Stream values must be increasing")
+    if not is_slot_coming_before(value, next) do
+      raise(
+        ArgumentError,
+        "Stream values must be increasing, got: [#{inspect(current: value, next: next)}]"
+      )
+    end
 
     if joint_in_delta?(value, next, join) do
-      collect_joint(Slot.join(value, next), fun, join)
+      {curr, next} = collect_joint(next, fun, join)
+      {Slot.join(value, curr), next}
     else
       {value, next}
     end
