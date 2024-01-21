@@ -57,6 +57,8 @@ defmodule Tempus.Slots do
       iex> Tempus.Slots.new([~D|2000-01-01|, ~D|2010-01-01|, ~D|2020-01-01|])
       %Tempus.Slots{slots: Enum.into(slots, Tempus.Slots.List.new())}
   """
+  @spec new(implementation :: :list | :data | module(), data :: Enumerable.t()) ::
+          Tempus.Slots.t()
   def new(implementation \\ @implementation, data)
   def new(@implementation, %implementation{} = data), do: new(implementation, data)
   def new(:list, data), do: new(Slots.List, data)

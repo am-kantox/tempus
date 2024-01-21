@@ -633,6 +633,48 @@ defmodule Tempus do
     end
   end
 
+  @doc """
+  Syntactic sugar for `Tempus.Slots.Stream.iterate/3` with default options `return_as: :slots, join: true`.
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      ...> Tempus.stream(~D|2024-01-20|, &Tempus.Slot.shift(&1, by: rem(&1.from.day, 2) + 1, unit: :day)) |> Enum.take(3)
+      [~I(2024-01-20T00:00:00.000000Z → 2024-01-21T23:59:59.999999Z),
+       ~I(2024-01-23T00:00:00.000000Z → 2024-01-23T23:59:59.999999Z),
+       ~I(2024-01-25T00:00:00.000000Z → 2024-01-25T23:59:59.999999Z)]
+  """
+  @spec stream(Slot.origin(), (Slot.t() -> Slot.t())) :: Slots.t(Slots.Stream)
+  def stream(start_value, next_fun) do
+    Slots.Stream.iterate(start_value, next_fun, join: true, return_as: :slots)
+  end
+
+  @doc """
+  Takes an amount of elements from the beginning of the `Tempus.Slots` structure, returning `Tempus.Slots.List` instance.
+
+  If amount is 0, it returns `Tempus.Slots.List.new/0`.
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      ...> Tempus.stream(~D|2024-01-20|, &Tempus.Slot.shift(&1, by: rem(&1.from.day, 2) + 1, unit: :day)) |> Tempus.take(3)
+      Tempus.Slots.new(:list, [~I(2024-01-20T00:00:00.000000Z → 2024-01-21T23:59:59.999999Z),
+                               ~I(2024-01-23T00:00:00.000000Z → 2024-01-23T23:59:59.999999Z),
+                               ~I(2024-01-25T00:00:00.000000Z → 2024-01-25T23:59:59.999999Z)])
+  """
+  @spec take(Slots.t(), non_neg_integer()) :: Slots.t(Slots.List)
+  def take(%Slots{} = slots, count) do
+    Slots.new(:list, Enum.take(slots, count))
+  end
+
+  @doc """
+  Creates the new instance of `Tempus.Slots.t(Tempus.Slots.Stream.t())` backed by stream.
+
+  This is a convinience wrapper for `Tempus.Slots.new(:stream, data)`.
+  """
+  @spec new(data :: Slots.container()) :: Slots.t(Slots.Stream)
+  def new(data), do: Slots.new(:stream, data)
+
   defp do_calc_subtract(slots, amount) do
     Enum.reduce_while(slots, amount, fn %Slot{} = slot, ms ->
       duration = Slot.duration(slot, :microsecond)

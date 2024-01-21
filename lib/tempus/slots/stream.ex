@@ -334,7 +334,10 @@ defmodule Tempus.Slots.Stream do
       [~I(2024-01-20T00:00:00.000000Z → 2024-01-21T23:59:59.999999Z),
        ~I(2024-01-23T00:00:00.000000Z → 2024-01-23T23:59:59.999999Z)]
   """
-  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), keyword()) :: Slots.Stream.t() | Slots.t()
+  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t())) :: Slots.Stream.t()
+  @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), [
+          {:join, nil | boolean() | pos_integer()} | {:return_as, :slots | :stream}
+        ]) :: Slots.Stream.t() | Slots.t(Slots.Stream)
   def iterate(start_value, next_fun, options \\ []) do
     next_fun = &(&1 |> next_fun.() |> Slot.wrap())
     jid = pop_jid(options)
