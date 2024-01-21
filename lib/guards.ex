@@ -4,6 +4,9 @@ defmodule Tempus.Guards do
 
   alias Tempus.Slot
 
+  import Tempus.Guards.Calendar,
+    only: [is_coming_before_in_era_ms: 2, is_equal_in_era_ms: 2, is_iso_calendar: 1]
+
   @dialyzer :no_contracts
 
   @doc """
@@ -63,7 +66,7 @@ defmodule Tempus.Guards do
     end
   end
 
-  @anno_domini Application.compile_env(:tempus, :anno_domini, 1970)
+  @anno_domini Tempus.Guards.Calendar.anno_domini()
   @month_justifier %{
     1 => 1,
     2 => 1,
@@ -93,7 +96,6 @@ defmodule Tempus.Guards do
     12 => 31 + 28 + 31 + 30 + 31 + 30 + 31 + 31 + 30 + 31 + 30
   }
   @leap_days_before_epoch div(@anno_domini, 4) - div(@anno_domini, 100) + div(@anno_domini, 400)
-
   @microseconds_multiplier Map.new(0..9, &{&1, Integer.pow(10, &1)})
 
   @doc """
@@ -181,6 +183,45 @@ defmodule Tempus.Guards do
     quote do: to_unix(unquote(data), 6)
   end
 
+  _doc = """
+  For ISO calendars, checks if the former argument comes before the latter one.
+
+  Allowed in guard tests. Inlined by the compiler.
+  """
+
+  @spec is_coming_before_in_unix_ms(DateTime.t(), DateTime.t()) :: boolean()
+  defguardp is_coming_before_in_unix_ms(dt1, dt2)
+            when is_iso_calendar(dt1) and is_iso_calendar(dt2) and to_unix(dt1) < to_unix(dt2)
+
+  @doc """
+  For any calendar, checks if the former argument comes before the latter one.
+
+  Allowed in guard tests. Inlined by the compiler.
+  """
+  @spec is_coming_before_in_ms(DateTime.t(), DateTime.t()) :: boolean()
+  defguard is_coming_before_in_ms(dt1, dt2)
+           when is_coming_before_in_unix_ms(dt1, dt2) or is_coming_before_in_era_ms(dt1, dt2)
+
+  _doc = """
+  For ISO calendars, checks if the former argument comes before the latter one.
+
+  Allowed in guard tests. Inlined by the compiler.
+  """
+
+  @spec is_equal_in_unix_ms(DateTime.t(), DateTime.t()) :: boolean()
+  defguardp is_equal_in_unix_ms(dt1, dt2)
+            when is_iso_calendar(dt1) and is_iso_calendar(dt2) and to_unix(dt1) === to_unix(dt2) and
+                   to_unix(dt1) != false
+
+  @doc """
+  For any calendar, checks if the former argument comes before the latter one.
+
+  Allowed in guard tests. Inlined by the compiler.
+  """
+  @spec is_equal_in_ms(DateTime.t(), DateTime.t()) :: boolean()
+  defguard is_equal_in_ms(dt1, dt2)
+           when is_equal_in_unix_ms(dt1, dt2) or is_equal_in_era_ms(dt1, dt2)
+
   @doc """
   Syntactic sugar for `is_struct(term, Date)`.
   """
@@ -266,10 +307,10 @@ defmodule Tempus.Guards do
       false
   """
   defguard is_datetime_equal(dt1, dt2)
-           when (is_datetime(dt1) and is_datetime(dt2) and
-                   (not is_timezone_equal(dt1, dt2) and to_unix(dt1) == to_unix(dt2))) or
-                  (is_timezone_equal(dt1, dt2) and is_date_equal(dt1, dt2) and
-                     is_time_equal(dt1, dt2))
+           when is_datetime(dt1) and is_datetime(dt2) and
+                  ((not is_timezone_equal(dt1, dt2) and is_equal_in_ms(dt1, dt2)) or
+                     (is_timezone_equal(dt1, dt2) and is_date_equal(dt1, dt2) and
+                        is_time_equal(dt1, dt2)))
 
   defguardp is_microsecond_coming_before(m1, m2) when elem(m1, 0) < elem(m2, 0)
 
@@ -285,7 +326,7 @@ defmodule Tempus.Guards do
 
   # This guard is not exposed because it’s prone to time-like objects in different timezones
   defguardp is_time_coming_before(t1, t2)
-            when :erlang.map_get(:calendar, t1) == :erlang.map_get(:calendar, t2) and
+            when is_like_time(t1) and is_like_time(t2) and is_same_calendar(t1, t2) and
                    (:erlang.map_get(:hour, t1) < :erlang.map_get(:hour, t2) or
                       (:erlang.map_get(:hour, t1) == :erlang.map_get(:hour, t2) and
                          :erlang.map_get(:minute, t1) < :erlang.map_get(:minute, t2)) or
@@ -319,7 +360,7 @@ defmodule Tempus.Guards do
   """
   defguard is_datetime_coming_before(dt1, dt2)
            when is_datetime(dt1) and is_datetime(dt2) and
-                  ((not is_timezone_equal(dt1, dt2) and to_unix(dt1) < to_unix(dt2)) or
+                  ((not is_timezone_equal(dt1, dt2) and is_coming_before_in_ms(dt1, dt2)) or
                      (is_timezone_equal(dt1, dt2) and
                         (is_date_coming_before(dt1, dt2) or
                            (is_date_equal(dt1, dt2) and is_time_coming_before(dt1, dt2)))))

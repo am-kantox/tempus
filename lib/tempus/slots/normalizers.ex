@@ -2,7 +2,7 @@ defmodule Tempus.Slots.Normalizers do
   @moduledoc false
 
   alias Tempus.{Slot, Slots}
-  import Tempus.Guards, only: [is_coming_before: 2]
+  import Tempus.Guards, only: [is_slot_coming_before: 2]
 
   @spec pop_jid([{:join, nil | boolean() | non_neg_integer()} | keyword()]) ::
           nil | non_neg_integer()
@@ -23,12 +23,12 @@ defmodule Tempus.Slots.Normalizers do
   defp inverse_inequality(true), do: false
   defp inverse_inequality(false), do: true
 
-  @spec to_locator(Slots.locator()) :: (Slot.t() -> :gt | :eq | :lt)
+  @spec to_locator(Slots.locator(), negate? :: boolean()) :: (Slot.t() -> :gt | :eq | :lt)
   def to_locator(slot, negate? \\ false)
 
   def to_locator(%Slot{} = slot, false) do
     fn other ->
-      case {is_coming_before(slot, other), is_coming_before(other, slot)} do
+      case {is_slot_coming_before(slot, other), is_slot_coming_before(other, slot)} do
         {false, false} -> :eq
         {true, false} -> :gt
         {false, true} -> :lt

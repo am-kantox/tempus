@@ -20,7 +20,7 @@ IEx.configure(
   ]
 )
 
-import Tempus.{Guards, Sigils}
+import Tempus.{Guards, Guards.Calendar, Sigils}
 alias Tempus.{Slot, Slots}
 
 microseconds_in_week = 604_800_000_000
