@@ -36,7 +36,9 @@ defmodule Tempus.Slots.List do
 
   @behaviour Slots.Behaviour
 
-  @doc false
+  @doc """
+  Creates the new instance of `Tempus.Slots.List` struct. One usually does not need to call this function directly.
+  """
   @impl Slots.Behaviour
   def new, do: slots()
 
