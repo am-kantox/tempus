@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.13.2`** — [:tada:] `Tempus.Slots.Stream.recurrent/3` to introduce cron-like streams
 - **`0.13.0`** — [:tada:] different calendars experimental support
 - **`0.12.1`** — [:tada:] timezones and more guards exported
 - **`0.11.0`** — [:books:] better coverage

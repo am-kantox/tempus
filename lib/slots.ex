@@ -35,7 +35,7 @@ defmodule Tempus.Slots do
           slots: implementation(group, exact_implementation)
         }
   @type t(group) :: t(group, implementation(group))
-  @type t :: t(module())
+  @type t :: t(Group.t())
   @typedoc "The type to use in navigation and/or rewinding slots enumerables"
   @type locator :: Slot.origin() | (Slot.t() -> :gt | :eq | :lt | true | false)
 
@@ -113,10 +113,12 @@ defmodule Tempus.Slots do
     end
   end
 
+  @spec drop_until(t(), locator()) :: t()
   @spec drop_until(t(), locator(), keyword()) :: t()
   def drop_until(%Slots{} = slots, pivot, options \\ []),
     do: slots |> split(pivot, options) |> elem(1)
 
+  @spec take_until(t(), locator()) :: t()
   @spec take_until(t(), locator(), keyword()) :: t()
   def take_until(%Slots{} = slots, pivot, options \\ []),
     do: slots |> split(pivot, options) |> elem(0)

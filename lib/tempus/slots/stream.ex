@@ -361,6 +361,79 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
+  @doc """
+   Produces a stream or recurrent weekly slots, given starting and ending `{dow, time, zone}` triples.
+
+   ### Examples
+       iex> import Tempus.Sigils
+       ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-01-22"), {7, "15:00:00", "Etc/UTC"}, {3, "01:00:00", "Etc/UTC"}) |> Enum.take(3)
+       [~I(2024-01-21T15:00:00.000000Z → 2024-01-24T01:00:00.000000Z),
+        ~I(2024-01-28T15:00:00.000000Z → 2024-01-31T01:00:00.000000Z),
+        ~I(2024-02-04T15:00:00.000000Z → 2024-02-07T01:00:00.000000Z)]
+       ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-01-22"), {1, "15:00:00", "Etc/UTC"}, {3, "01:00:00", "Etc/UTC"}) |> Enum.take(3)
+       [~I(2024-01-22T15:00:00.000000Z → 2024-01-24T01:00:00.000000Z),
+        ~I(2024-01-29T15:00:00.000000Z → 2024-01-31T01:00:00.000000Z),
+        ~I(2024-02-05T15:00:00.000000Z → 2024-02-07T01:00:00.000000Z)]
+       ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-01-22"), {1, "15:00:00", "Etc/UTC"}, {1, "15:00:00", "Australia/Sydney"}) |> Enum.take(3)
+       [~I(2024-01-15T15:00:00.000000Z → 2024-01-22T15:00:00.000000+11:00),
+        ~I(2024-01-22T15:00:00.000000Z → 2024-01-29T15:00:00.000000+11:00),
+        ~I(2024-01-29T15:00:00.000000Z → 2024-02-05T15:00:00.000000+11:00)]
+       ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-01-22"), {1, "09:00:00", "Australia/Sydney"}, {7, "23:00:00", "Etc/UTC"}) |> Enum.take(3)
+       [%Tempus.Slot{from: DateTime.new!(~D"2024-01-29", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-01-28T23:00:00.000000Z|},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-02-05", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-04T23:00:00.000000Z|},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-02-12", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-11T23:00:00.000000Z|}]
+  """
+  @spec recurrent(origin :: nil | Date.t(), from :: recurrent_time, to :: recurrent_time) ::
+          Slots.t(Slots.Stream)
+          | {:error,
+             :incompatible_calendars
+             | :invalid_format
+             | :invalid_input
+             | :invalid_time
+             | :time_zone_not_found
+             | :utc_only_time_zone_database}
+          | {:ambiguous, DateTime.t(), DateTime.t()}
+          | {:gap, DateTime.t(), DateTime.t()}
+        when recurrent_time: {Calendar.day_of_week(), Time.t(), Calendar.time_zone()}
+  def recurrent(origin \\ nil, {from_dow, from_time, from_tz}, {to_dow, to_time, to_tz}) do
+    today =
+      case origin do
+        %Date{} -> origin
+        %DateTime{} = dt -> DateTime.to_date(dt)
+        _ -> Date.utc_today()
+      end
+
+    with {:ok, from_time} <- from_time |> to_string() |> Time.from_iso8601(),
+         {:ok, to_time} <- to_time |> to_string() |> Time.from_iso8601(),
+         {:ok, prev_from} <-
+           DateTime.new(
+             Date.add(today, -14 - Date.day_of_week(today) + from_dow),
+             from_time,
+             from_tz
+           ),
+         {:ok, prev_to} <-
+           DateTime.new(Date.add(today, -14 - Date.day_of_week(today) + to_dow), to_time, to_tz),
+         {:ok, start} <-
+           (case DateTime.compare(prev_from, prev_to) do
+              :eq ->
+                Tempus.slot(prev_from, prev_to)
+
+              :gt ->
+                Tempus.slot(DateTime.add(prev_from, -7, :day), prev_to)
+
+              :lt ->
+                if DateTime.diff(prev_to, prev_from) / 86_400 > 7,
+                  do: Tempus.slot(prev_from, DateTime.add(prev_to, -7, :day)),
+                  else: Tempus.slot(prev_from, prev_to)
+            end) do
+      start
+      |> iterate(&Slot.shift(&1, by: 7, unit: :day), join: false, return_as: :slots)
+      |> Tempus.drop_while(&is_slot_coming_before(&1, Slot.wrap(today)))
+    else
+      error -> error
+    end
+  end
+
   defp collect_joint(%Slot{} = value, fun, join) do
     %Slot{} = next = fun.(value)
 
