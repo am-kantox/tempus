@@ -614,7 +614,10 @@ defmodule Tempus do
               {:halt, {collected, ms}}
 
             slot, {collected, ms} ->
-              {:cont, {[slot | collected], ms + Slot.duration(slot, :microsecond)}}
+              case Slot.duration(slot, :microsecond) do
+                :infinity -> {:halt, {[slot | collected], ms}}
+                duration when is_integer(duration) -> {:cont, {[slot | collected], ms + duration}}
+              end
           end)
           |> elem(0)
           |> Enum.reverse()
