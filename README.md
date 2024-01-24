@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.14.0`** — [:books:] refactoring of guard usage and docs update
 - **`0.13.3`** — [:ant:] avoid crash on the incorrect input of slots
 - **`0.13.2`** — [:tada:] `Tempus.Slots.Stream.recurrent/3` to introduce cron-like streams
 - **`0.13.0`** — [:tada:] different calendars experimental support
