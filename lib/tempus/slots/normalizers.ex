@@ -28,6 +28,8 @@ defmodule Tempus.Slots.Normalizers do
 
   def to_locator(%Slot{} = slot, false) do
     fn other ->
+      other = Slot.wrap(other)
+
       case {is_slot_coming_before(slot, other), is_slot_coming_before(other, slot)} do
         {false, false} -> :eq
         {true, false} -> :gt

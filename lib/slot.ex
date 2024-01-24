@@ -16,7 +16,7 @@ defmodule Tempus.Slot do
         }
 
   @typedoc "The origin used in comparisons and calculations"
-  @type origin :: Slot.t() | Date.t() | DateTime.t() | Time.t() | nil
+  @type origin :: Slot.t() | Date.t() | DateTime.t() | nil
 
   defstruct [:from, :to]
 
@@ -443,9 +443,26 @@ defmodule Tempus.Slot do
   """
   def compare(s1, s2, strict \\ false)
 
-  def compare(void(), void(), _), do: :eq
-  def compare(s1, s2, _) when is_coming_before(s1, s2), do: :lt
-  def compare(s1, s2, _) when is_coming_before(s2, s1), do: :gt
+  def compare(value, value, _), do: :eq
+  def compare(_, void(), false), do: :eq
+  def compare(_, void(), true), do: :joint
+  def compare(void(), _, false), do: :eq
+  def compare(void(), _, true), do: :joint
+  def compare(nil, _, _), do: :lt
+  def compare(_, nil, _), do: :lt
+  def compare(%Slot{} = s1, %Slot{} = s2, _) when is_slot_coming_before(s1, s2), do: :lt
+  def compare(%Slot{} = s1, %Slot{} = s2, _) when is_slot_coming_before(s2, s1), do: :gt
+
+  def compare(%Date{} = d, %DateTime{} = dt, strict),
+    do: compare(Slot.wrap(d), Slot.wrap(dt), strict)
+
+  def compare(%DateTime{} = dt, %Date{} = d, strict),
+    do: compare(Slot.wrap(dt), Slot.wrap(d), strict)
+
+  def compare(%Date{} = d, %Slot{} = s, strict), do: compare(Slot.wrap(d), s, strict)
+  def compare(%Slot{} = s, %Date{} = d, strict), do: compare(s, Slot.wrap(d), strict)
+  def compare(%DateTime{} = dt, %Slot{} = s, strict), do: compare(Slot.wrap(dt), s, strict)
+  def compare(%Slot{} = s, %DateTime{} = dt, strict), do: compare(s, Slot.wrap(dt), strict)
 
   def compare(%Slot{from: nil, to: %DateTime{}}, %Slot{from: nil, to: %DateTime{}}, false),
     do: :eq
@@ -617,7 +634,15 @@ defmodule Tempus.Slot do
     check_shifted(do_shift(from, by_from, unit), do_shift(to, by_to, unit))
   end
 
-  defp check_shifted(from, to) when not is_coming_before(to, from), do: %Slot{from: from, to: to}
+  @spec check_shifted(maybe_datetime, maybe_datetime) :: Slot.t()
+        when maybe_datetime: nil | DateTime.t()
+  defp check_shifted(nil, nil), do: void()
+  defp check_shifted(nil, to), do: %Slot{from: nil, to: to}
+  defp check_shifted(from, nil), do: %Slot{from: from, to: nil}
+
+  defp check_shifted(%DateTime{} = from, %DateTime{} = to)
+       when not is_datetime_coming_before(to, from),
+       do: %Slot{from: from, to: to}
 
   defp check_shifted(_, _), do: void()
 
@@ -669,7 +694,9 @@ defmodule Tempus.Slot do
       when is_slot_coming_before(prev, next),
       do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
 
-  def gap([prev, next]) when is_slot_coming_before(next, prev), do: gap([next, prev])
+  def gap([%Slot{} = prev, %Slot{} = next]) when is_slot_coming_before(next, prev),
+    do: gap([next, prev])
+
   def gap([%Slot{from: nil, to: from}]), do: shift(%Slot{from: from, to: nil}, from: 1)
   def gap([%Slot{from: to, to: nil}]), do: shift(%Slot{from: nil, to: to}, to: -1)
   def gap(_), do: void()

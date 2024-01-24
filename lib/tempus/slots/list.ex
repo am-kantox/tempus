@@ -76,10 +76,10 @@ defmodule Tempus.Slots.List do
   @spec do_add(nil | non_neg_integer(), Slot.t(), [Slot.t()], [Slot.t()]) :: [Slot.t()]
   defp do_add(_, slot, head, []), do: Enum.reverse([slot | head])
 
-  defp do_add(nil, slot, head, [th | tail]) when is_coming_before(th, slot),
+  defp do_add(nil, slot, head, [th | tail]) when is_slot_coming_before(th, slot),
     do: do_add(nil, slot, [th | head], tail)
 
-  defp do_add(nil, slot, head, [th | tail]) when is_coming_before(slot, th),
+  defp do_add(nil, slot, head, [th | tail]) when is_slot_coming_before(slot, th),
     do: Enum.reverse(head) ++ [slot, th | tail]
 
   defp do_add(nil, slot, head, [th | tail]),
@@ -148,36 +148,36 @@ defmodule Tempus.Slots.List do
 
   # case: slots are joint
   defp do_merge_lists(jid, [hs | ts], [ho | to], result)
-       when is_joint(hs, ho) and is_coming_before(hs.to, ho.to),
+       when is_joint(hs, ho) and is_datetime_coming_before(hs.to, ho.to),
        do: do_merge_lists(jid, ts, [Slot.join(hs, ho) | to], result)
 
   defp do_merge_lists(jid, [hs | ts], [ho | to], result)
-       when is_joint(hs, ho) and is_coming_before(ho.to, hs.to),
+       when is_joint(hs, ho) and is_datetime_coming_before(ho.to, hs.to),
        do: do_merge_lists(jid, [Slot.join(hs, ho) | ts], to, result)
 
   defp do_merge_lists(jid, [hs | ts], [ho | to], result) when is_joint(hs, ho),
     do: do_merge_lists(jid, ts, to, [Slot.join(hs, ho) | result])
 
   # case: no check for joint in delta
-  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_coming_before(hs, ho),
+  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_slot_coming_before(hs, ho),
     do: do_merge_lists(nil, ts, [ho | to], [hs | result])
 
-  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_coming_before(ho, hs),
+  defp do_merge_lists(nil, [hs | ts], [ho | to], result) when is_slot_coming_before(ho, hs),
     do: do_merge_lists(nil, [hs | ts], to, [ho | result])
 
   # case: check for joint in delta
   defp do_merge_lists(jid, [hs | ts], [ho | to], result) do
     cond do
-      is_coming_before(hs, ho) and not joint_in_delta?(hs, ho, jid) ->
+      is_slot_coming_before(hs, ho) and not joint_in_delta?(hs, ho, jid) ->
         do_merge_lists(jid, ts, [ho | to], [hs | result])
 
-      is_coming_before(ho, hs) and not joint_in_delta?(ho, hs, jid) ->
+      is_slot_coming_before(ho, hs) and not joint_in_delta?(ho, hs, jid) ->
         do_merge_lists(jid, [hs | ts], to, [ho | result])
 
-      is_coming_before(hs.to, ho.to) ->
+      is_datetime_coming_before(hs.to, ho.to) ->
         do_merge_lists(jid, ts, [Slot.join(hs, ho) | to], result)
 
-      is_coming_before(ho.to, hs.to) ->
+      is_datetime_coming_before(ho.to, hs.to) ->
         do_merge_lists(jid, [Slot.join(hs, ho) | ts], to, result)
 
       true ->
@@ -270,7 +270,7 @@ defmodule Tempus.Slots.List do
         [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
         [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
       }
-      iex> slots |> Tempus.Slots.List.split(&is_coming_before(~U|2020-08-09T12:00:00Z|, &1))
+      iex> slots |> Tempus.Slots.List.split(&is_slot_coming_before(Tempus.Slot.wrap(~U|2020-08-09T12:00:00Z|), &1))
       {
         [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
         [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
@@ -315,7 +315,7 @@ defmodule Tempus.Slots.List do
   defp do_next([], _pivot, _count, acc), do: {[], acc}
 
   defp do_next([%Slot{} = head | _] = list, %Slot{} = origin, count, acc)
-       when not is_coming_before(head, origin),
+       when not is_slot_coming_before(head, origin),
        do: do_skip(list, count, acc)
 
   defp do_next([%Slot{} = head | tail], %Slot{} = origin, count, acc),
@@ -353,7 +353,8 @@ defmodule Tempus.Slots.List do
 
   Enum.each(0..@lookbehinds, fn count ->
     defp do_previous(match_n_slots(unquote(count)), %Slot{} = origin, unquote(count), acc)
-         when not is_coming_before(origin, slot_before) and is_coming_before(origin, slot_after),
+         when not is_slot_coming_before(origin, slot_before) and
+                is_slot_coming_before(origin, slot_after),
          do: {list, acc}
 
     defp do_previous(match_n_slots(unquote(count)), %Slot{} = origin, unquote(count), acc),

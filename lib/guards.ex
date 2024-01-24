@@ -578,7 +578,11 @@ defmodule Tempus.Guards do
                      (is_datetime(o) and is_datetime_covered(o, s)))
 
   @doc """
-  Guard to compare two instances of `t:Tempus.Slot.origin/0`
+  Guard to compare two instances of `t:Tempus.Slot.origin/0`.
+
+  Beware this guards returns a meaningful `true`/`false` if and only all the input types
+    are correct. When passing not `t:Slot.origin/0` as any of parameter it would
+    return `false` and therefore it’s negation is tricky.
 
   ## Examples
 
@@ -632,12 +636,12 @@ defmodule Tempus.Guards do
   """
   def joint_in_delta?(s1, s2, _delta) when is_joint(s1, s2), do: true
 
-  def joint_in_delta?(s1, s2, delta) when is_coming_before(s2, s1) do
+  def joint_in_delta?(s1, s2, delta) when is_slot_coming_before(s2, s1) do
     joint_in_delta?(s2, s1, delta)
   end
 
   def joint_in_delta?(s1, s2, [{unit, delta}])
-      when is_coming_before(s1, s2),
+      when is_slot_coming_before(s1, s2),
       do: abs(DateTime.diff(s1.to, s2.from, unit)) <= delta
 
   def joint_in_delta?(s1, s2, delta_seconds), do: joint_in_delta?(s1, s2, second: delta_seconds)
