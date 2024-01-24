@@ -258,7 +258,7 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> slots
-      ...> |> Tempus.drop_while(&is_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
+      ...> |> Tempus.drop_while(&is_slot_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
       ...> |> Enum.count()
       1
   """
@@ -279,7 +279,7 @@ defmodule Tempus do
       ...>   Tempus.Slot.wrap(~D|2020-08-10|)
       ...> ] |> Enum.into(%Tempus.Slots{})
       iex> slots
-      ...> |> Tempus.take_while(&is_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
+      ...> |> Tempus.take_while(&is_slot_coming_before(&1, Tempus.Slot.wrap(~D|2020-08-09|)))
       ...> |> Enum.count()
       1
   """
@@ -411,7 +411,7 @@ defmodule Tempus do
 
   def next_busy(%Slots{} = slots, opts) do
     {origin, count, iterator} = options(opts)
-    do_next_busy(slots, origin, count, iterator)
+    do_next_busy(slots, Slot.wrap(origin), count, iterator)
   end
 
   defp do_next_busy(slots, origin, :infinity, 1) do
@@ -435,7 +435,7 @@ defmodule Tempus do
     |> Enum.take(2)
     |> then(fn
       [_, joint] when is_joint(joint, origin) -> joint
-      [slot | _] when is_coming_before(slot, origin) -> slot
+      [slot | _] when is_slot_coming_before(slot, origin) -> slot
       _ -> nil
     end)
   end

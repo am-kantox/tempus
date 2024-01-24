@@ -107,8 +107,8 @@ defmodule Tempus.Slots.Stream do
   defp do_reducer(nil) do
     fn
       slot, nil -> {[slot], nil}
-      slot, s when is_coming_before(slot, s) -> {[slot], s}
-      slot, s when is_coming_before(s, slot) -> {[s, slot], nil}
+      slot, s when is_slot_coming_before(slot, s) -> {[slot], s}
+      slot, s when is_slot_coming_before(s, slot) -> {[s, slot], nil}
       slot, s -> {[], Slot.join(slot, s)}
     end
   end
@@ -120,10 +120,10 @@ defmodule Tempus.Slots.Stream do
 
       slot, s ->
         cond do
-          is_coming_before(slot, s) and not joint_in_delta?(slot, s, jid) ->
+          is_slot_coming_before(slot, s) and not joint_in_delta?(slot, s, jid) ->
             {[slot], s}
 
-          is_coming_before(s, slot) and not joint_in_delta?(s, slot, jid) ->
+          is_slot_coming_before(s, slot) and not joint_in_delta?(s, slot, jid) ->
             {[s, slot], nil}
 
           true ->
@@ -166,16 +166,16 @@ defmodule Tempus.Slots.Stream do
     split = fn slot, slots, jid ->
       head_splitter =
         if is_integer(jid) do
-          &(is_coming_before(&1, slot) and not joint_in_delta?(&1, slot, jid))
+          &(is_slot_coming_before(&1, slot) and not joint_in_delta?(&1, slot, jid))
         else
-          &is_coming_before(&1, slot)
+          &is_slot_coming_before(&1, slot)
         end
 
       joint_splitter =
         if jid do
-          &(not is_coming_before(slot, &1) or joint_in_delta?(slot, &1, jid))
+          &(not is_slot_coming_before(slot, &1) or joint_in_delta?(slot, &1, jid))
         else
-          &(not is_coming_before(slot, &1))
+          &(not is_slot_coming_before(slot, &1))
         end
 
       {to_emit, maybe_rest} = Enum.split_while(slots, head_splitter)
@@ -187,7 +187,7 @@ defmodule Tempus.Slots.Stream do
       slot, [] ->
         {[slot], []}
 
-      slot, [h | _] = list when is_coming_before(slot, h) and is_nil(jid) ->
+      slot, [h | _] = list when is_slot_coming_before(slot, h) and is_nil(jid) ->
         {[slot], list}
 
       slot, list ->
@@ -227,16 +227,16 @@ defmodule Tempus.Slots.Stream do
           is_integer(jid) && joint_in_delta?(e1, e2, jid) ->
             {[], {idx, %Slots.List{slots: [Slot.join(e1, e2)]}}}
 
-          is_coming_before(e1, e2) ->
+          is_slot_coming_before(e1, e2) ->
             {[e1], {idx, %Slots.List{slots: [e2]}}}
 
-          is_coming_before(e2, e1) ->
+          is_slot_coming_before(e2, e1) ->
             {[e2], {idx, %Slots.List{slots: [e1]}}}
         end
 
       {e1, e2, idx}, {_, acc} ->
-        wrapper = if is_coming_before(e1.from, e2.from), do: e1, else: e2
-        {to_emit, rest} = Enum.split_while(acc, &is_coming_before(&1, wrapper))
+        wrapper = if is_datetime_coming_before(e1.from, e2.from), do: e1, else: e2
+        {to_emit, rest} = Enum.split_while(acc, &is_slot_coming_before(&1, wrapper))
         {to_emit, {idx, %Slots.List{slots: rest} |> Slots.List.add(e1) |> Slots.List.add(e2)}}
     end
 
@@ -475,7 +475,7 @@ defmodule Tempus.Slots.Stream do
         [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
       ]
       iex> slots
-      ...> |> Tempus.Slots.Stream.split(&is_coming_before(~U|2020-08-09T12:00:00Z|, &1))
+      ...> |> Tempus.Slots.Stream.split(&is_slot_coming_before(Tempus.Slot.wrap(~U|2020-08-09T12:00:00Z|), &1))
       ...> |> Tuple.to_list()
       ...> |> Enum.map(&Enum.to_list/1)
       [
@@ -591,10 +591,17 @@ defmodule Tempus.Slots.Stream do
       options
       |> Keyword.get(:until)
       |> case do
-        nil -> stream
-        count when is_integer(count) -> Stream.take(stream, count)
-        origin when is_origin(origin) -> Stream.take_while(stream, &is_coming_before(&1, origin))
-        fun when is_function(fun, 1) -> Stream.take_while(stream, &(not fun.(&1)))
+        nil ->
+          stream
+
+        count when is_integer(count) ->
+          Stream.take(stream, count)
+
+        origin when is_origin(origin) ->
+          Stream.take_while(stream, &is_slot_coming_before(&1, Slot.wrap(origin)))
+
+        fun when is_function(fun, 1) ->
+          Stream.take_while(stream, &(not fun.(&1)))
       end
       |> Enum.to_list()
     end
