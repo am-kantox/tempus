@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.14.1`** — [:ant:] `recurrent/3` has now concerned about DST (fuck DST btw)
 - **`0.14.0`** — [:books:] refactoring of guard usage and docs update
 - **`0.13.3`** — [:ant:] avoid crash on the incorrect input of slots
 - **`0.13.2`** — [:tada:] `Tempus.Slots.Stream.recurrent/3` to introduce cron-like streams

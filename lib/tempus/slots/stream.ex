@@ -382,6 +382,9 @@ defmodule Tempus.Slots.Stream do
        [%Tempus.Slot{from: DateTime.new!(~D"2024-01-29", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-01-28T23:00:00.000000Z|},
         %Tempus.Slot{from: DateTime.new!(~D"2024-02-05", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-04T23:00:00.000000Z|},
         %Tempus.Slot{from: DateTime.new!(~D"2024-02-12", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-11T23:00:00.000000Z|}]
+       ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-03-28"), {1, "09:00:00", "Australia/Sydney"}, {7, "23:00:00", "Etc/UTC"}) |> Enum.take(2)
+       [%Tempus.Slot{from: DateTime.new!(~D"2024-04-01", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-03-31T23:00:00.000000Z|},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-04-08", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-04-07T23:00:00.000000Z|}]
   """
   @spec recurrent(origin :: nil | Date.t(), from :: recurrent_time, to :: recurrent_time) ::
           Slots.t(Slots.Stream)
@@ -406,13 +409,16 @@ defmodule Tempus.Slots.Stream do
     with {:ok, from_time} <- from_time |> to_string() |> Time.from_iso8601(),
          {:ok, to_time} <- to_time |> to_string() |> Time.from_iso8601(),
          {:ok, prev_from} <-
-           DateTime.new(
-             Date.add(today, -14 - Date.day_of_week(today) + from_dow),
+           today
+           |> Date.add(-14 - Date.day_of_week(today) + from_dow)
+           |> DateTime.new(
              from_time,
              from_tz
            ),
          {:ok, prev_to} <-
-           DateTime.new(Date.add(today, -14 - Date.day_of_week(today) + to_dow), to_time, to_tz),
+           today
+           |> Date.add(-14 - Date.day_of_week(today) + to_dow)
+           |> DateTime.new(to_time, to_tz),
          {:ok, start} <-
            (case DateTime.compare(prev_from, prev_to) do
               :eq ->
@@ -427,11 +433,20 @@ defmodule Tempus.Slots.Stream do
                   else: Tempus.slot(prev_from, prev_to)
             end) do
       start
-      |> iterate(&Slot.shift(&1, by: 7, unit: :day), join: false, return_as: :slots)
+      |> iterate(&shift_week_keep_time/1, join: false, return_as: :slots)
       |> Tempus.drop_while(&is_slot_coming_before(&1, Slot.wrap(today)))
     else
       error -> error
     end
+  end
+
+  defp shift_week_keep_time(%Slot{from: %DateTime{} = from, to: %DateTime{} = to} = slot) do
+    result = Slot.shift(slot, by: 7, unit: :day)
+
+    %Slot{
+      from: %DateTime{result.from | hour: from.hour},
+      to: %DateTime{result.to | hour: to.hour}
+    }
   end
 
   defp collect_joint(%Slot{} = value, fun, join) do
