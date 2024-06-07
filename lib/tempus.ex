@@ -688,6 +688,37 @@ defmodule Tempus do
     end)
   end
 
+  @doc """
+  Creates a `Tempus.Slots.Stream.t()` slots stream by a cron-like definition.
+
+  ### Examples
+
+      iex> import Tempus.Sigils
+      iex> ~U[2024-06-07 12:00:00Z] |> Tempus.parse_cron("10-30/15 */4 1 */1 6,7") |> Enum.take(5)
+      [
+        ~I(2024-06-08T00:10:00Z → 2024-06-08T00:10:00Z),
+        ~I(2024-06-08T00:25:00Z → 2024-06-08T00:25:00Z),
+        ~I(2024-06-08T04:10:00Z → 2024-06-08T04:10:00Z),
+        ~I(2024-06-08T04:25:00Z → 2024-06-08T04:25:00Z),
+        ~I(2024-06-08T08:10:00Z → 2024-06-08T08:10:00Z)
+      ]
+  """
+  @spec parse_cron(origin :: Slot.origin() | nil, cron :: binary() | Tempus.Crontab.t()) ::
+          Tempus.Slots.t(Stream)
+  def parse_cron(nil, cron), do: parse_cron(DateTime.utc_now(), cron)
+
+  def parse_cron(origin, cron) do
+    require Tempus.Slots.Stream
+
+    slots =
+      origin
+      |> Tempus.Crontab.next_as_stream(cron)
+      |> Stream.map(&Keyword.fetch!(&1, :next))
+      |> Enum.into(Tempus.Slots.Stream.slots())
+
+    %Tempus.Slots{slots: slots}
+  end
+
   @spec options(opts :: options()) :: options_tuple()
   defp options(opts) when is_list(opts) do
     origin =

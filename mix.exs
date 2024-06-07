@@ -2,7 +2,7 @@ defmodule Tempus.MixProject do
   use Mix.Project
 
   @app :tempus
-  @version "0.14.1"
+  @version "0.15.0"
 
   def project do
     [
@@ -42,6 +42,7 @@ defmodule Tempus.MixProject do
   defp deps do
     [
       {:telemetria, "~> 0.8", optional: true},
+      {:formulae, "~> 0.15"},
       {:avl_tree, "~> 1.0"},
       # dev / test
       {:tzdata, "~> 1.0", only: [:dev, :test]},
