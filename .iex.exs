@@ -17,7 +17,20 @@ IEx.configure(
       nil: :magenta,
       list: :white
     ]
-  ]
+  ],
+  default_prompt: [
+      :blue,
+      "%prefix",
+      :yellow,
+      "|⌚|",
+      :blue,
+      "%counter",
+      :yellow,
+      " ▸",
+      :reset
+    ]
+    |> IO.ANSI.format()
+    |> IO.chardata_to_string()
 )
 
 import Tempus.{Guards, Guards.Calendar, Sigils}

@@ -465,8 +465,8 @@ defmodule Tempus.Crontab do
 
   _Examples_
 
-      iex> Tempus.Crontab.formula("42 3 28 08 *").formula
-      "(month == 8) && (day == 28) && (minute == 42) && (hour == 3) && (rem(day_of_week, 1) == 0)"
+      iex> Tempus.Crontab.formula("42 3 28 08 *").formula |> String.split(" && ") |> Enum.sort()
+      ["(day == 28)", "(hour == 3)", "(minute == 42)", "(month == 8)", "(rem(day_of_week, 1) == 0)"]
 
       iex> Tempus.Crontab.formula("423 * * * *")
       {:error, [minute: {:could_not_parse_field, ["423"]}]}
