@@ -94,7 +94,7 @@ defmodule Tempus.MixProject do
       assets: "stuff/images",
       extras: ~w[README.md stuff/background.md stuff/getting-started.md],
       groups_for_modules: [
-        Helpers: [Tempus.Guards, Tempus.Sigils],
+        Helpers: [Tempus.Crontab, Tempus.Guards, Tempus.Sigils],
         Core: [Tempus.Slot, Tempus.Slots],
         Implementations: [Tempus.Slots.List, Tempus.Slots.Stream]
       ]
