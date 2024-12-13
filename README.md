@@ -13,6 +13,7 @@ end
 ```
 
 ## Changelog
+- **`0.16.0`** — [:books:] tiny code improvements, `v1.18.0`, deprecation of `is_covered/2`
 - **`0.15.0`** — [:tada:] `Tempus.parse_cron/2` and low-level `Tempus.Crontab`
 - **`0.14.1`** — [:ant:] `recurrent/3` has now concerned about DST (fuck DST btw)
 - **`0.14.0`** — [:books:] refactoring of guard usage and docs update
