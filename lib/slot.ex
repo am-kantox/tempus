@@ -186,10 +186,12 @@ defmodule Tempus.Slot do
   """
   def cover?(slot, dt, strict? \\ false)
 
-  def cover?(%Slot{} = slot, %DateTime{} = dt, _) when not is_covered(dt, slot), do: false
+  def cover?(%Slot{} = slot, %DateTime{} = dt, _) when not is_datetime_covered(dt, slot),
+    do: false
+
   def cover?(%Slot{} = slot, %DateTime{} = dt, true) when is_slot_border(dt, slot), do: false
   def cover?(%Slot{}, %DateTime{}, _), do: true
-  def cover?(%Slot{} = slot, %Slot{} = dt, _) when not is_covered(dt, slot), do: false
+  def cover?(%Slot{} = slot, %Slot{} = dt, _) when not is_slot_covered(dt, slot), do: false
 
   def cover?(%Slot{} = slot, %Slot{from: from, to: to}, true)
       when is_slot_border(from, slot) or is_slot_border(to, slot),

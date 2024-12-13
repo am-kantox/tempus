@@ -648,6 +648,7 @@ defmodule Tempus do
        ~I(2024-01-25T00:00:00.000000Z → 2024-01-25T23:59:59.999999Z)]
   """
   @spec stream(Slot.origin(), (Slot.t() -> Slot.t())) :: Slots.t(Slots.Stream)
+  @dialyzer {:nowarn_function, [stream: 2]}
   def stream(start_value, next_fun) do
     Slots.Stream.iterate(start_value, next_fun, join: true, return_as: :slots)
   end

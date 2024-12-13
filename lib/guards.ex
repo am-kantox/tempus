@@ -536,46 +536,76 @@ defmodule Tempus.Guards do
       true
   """
   @spec is_joint(Slot.t(), Slot.t()) :: boolean()
-  defguard is_joint(s1, s2)
-           when is_slot(s1) and is_slot(s2) and
-                  (is_datetime_covered(:erlang.map_get(:from, s1), s2) or
-                     is_datetime_covered(:erlang.map_get(:to, s1), s2) or
-                     is_datetime_covered(:erlang.map_get(:from, s2), s1) or
-                     is_datetime_covered(:erlang.map_get(:to, s2), s1))
+  if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
+    defguard is_joint(s1, s2)
+             when is_slot(s1) and is_slot(s2) and
+                    (is_datetime_covered(:erlang.map_get(:from, s1), s2) or
+                       is_datetime_covered(:erlang.map_get(:to, s1), s2) or
+                       is_datetime_covered(:erlang.map_get(:from, s2), s1) or
+                       is_datetime_covered(:erlang.map_get(:to, s2), s1))
+  else
+    defguard is_joint(s1, s2)
+             when is_slot(s1) and is_slot(s2) and
+                    not is_datetime_coming_before(
+                      :erlang.map_get(:to, s1),
+                      :erlang.map_get(:from, s2)
+                    ) and
+                    not is_datetime_coming_before(
+                      :erlang.map_get(:to, s2),
+                      :erlang.map_get(:from, s1)
+                    )
+  end
 
-  @doc """
-  Guard to validate the slot covers the origin passed as the first argument
+  if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
+    @doc """
+    Guard to validate the slot covers the origin passed as the first argument
 
-  ## Examples
+    ## Examples
 
-      iex> import Tempus.Guards, only: [is_covered: 2]
-      ...> import Tempus.Sigils
-      ...> {from, to} = {~U[2023-04-10 00:00:00Z], ~U[2023-04-10 00:59:59Z]}
-      ...> s = %Tempus.Slot{from: from, to: to}
-      ...> is_covered(from, s) and is_covered(to, s)
-      true
-      iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
-      ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
-      ...> is_covered(s1, s2)
+        iex> import Tempus.Guards, only: [is_covered: 2]
+        ...> import Tempus.Sigils
+        ...> {from, to} = {~U[2023-04-10 00:00:00Z], ~U[2023-04-10 00:59:59Z]}
+        ...> s = %Tempus.Slot{from: from, to: to}
+        ...> is_covered(from, s) and is_covered(to, s)
+        true
+        iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+        ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
+        ...> is_covered(s1, s2)
+        false
+        iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+        ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
+        ...> is_covered(s1, s2)
+        false
+        iex> s_bcn = ~U[2023-06-26T09:30:00Z]
+        ...> s_ny = ~D|2023-06-26| |> Tempus.Slot.wrap() |> Tempus.Slot.shift_tz("America/New_York")
+        ...> is_covered(s_bcn, s_ny)
+        true
+        iex> s_bcn = ~D[2023-06-26]
+        ...> s_ny = Tempus.slot!(~D|2023-06-26|, ~D|2023-06-27|) |> Tempus.Slot.shift_tz("America/New_York")
+        ...> is_covered(s_bcn, s_ny)
+        false
+    """
+    @spec is_covered(Slot.t() | DateTime.t(), Slot.t()) :: boolean()
+    defguard is_covered(o, s)
+             when is_slot(s) and
+                    ((is_slot(o) and is_slot_covered(o, s)) or
+                       (is_datetime(o) and is_datetime_covered(o, s)))
+  else
+    @doc deprecated: "use `is_slot_covered/2` and/or `is_datetime_covered/2` instead"
+    @doc """
+    Due to compiler limitations, this macro is gone for `v1.18+`, use `is_slot_covered/2` and/or `is_datetime_covered/2` explicitly.
+
+    This guard will always return `false` for `v1.18` and will be removed in `v1.19`
+    """
+    @spec is_covered(Slot.t() | DateTime.t(), Slot.t()) :: false
+    defmacro is_covered(_o, _s) do
+      IO.warn(
+        "Due to compiler limitations, this macro is gone for `v1.18+`, use `is_slot_covered/2` and/or `is_datetime_covered/2` explicitly"
+      )
+
       false
-      iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
-      ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
-      ...> is_covered(s1, s2)
-      false
-      iex> s_bcn = ~U[2023-06-26T09:30:00Z]
-      ...> s_ny = ~D|2023-06-26| |> Tempus.Slot.wrap() |> Tempus.Slot.shift_tz("America/New_York")
-      ...> is_covered(s_bcn, s_ny)
-      true
-      iex> s_bcn = ~D[2023-06-26]
-      ...> s_ny = Tempus.slot!(~D|2023-06-26|, ~D|2023-06-27|) |> Tempus.Slot.shift_tz("America/New_York")
-      ...> is_covered(s_bcn, s_ny)
-      false
-  """
-  @spec is_covered(Slot.t() | DateTime.t(), Slot.t()) :: boolean()
-  defguard is_covered(o, s)
-           when is_slot(s) and
-                  ((is_slot(o) and is_slot_covered(o, s)) or
-                     (is_datetime(o) and is_datetime_covered(o, s)))
+    end
+  end
 
   @doc """
   Guard to compare two instances of `t:Tempus.Slot.origin/0`.

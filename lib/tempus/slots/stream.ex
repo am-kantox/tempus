@@ -398,6 +398,7 @@ defmodule Tempus.Slots.Stream do
           | {:ambiguous, DateTime.t(), DateTime.t()}
           | {:gap, DateTime.t(), DateTime.t()}
         when recurrent_time: {Calendar.day_of_week(), Time.t(), Calendar.time_zone()}
+  @dialyzer {:nowarn_function, [recurrent: 2, recurrent: 3]}
   def recurrent(origin \\ nil, {from_dow, from_time, from_tz}, {to_dow, to_time, to_tz}) do
     today =
       case origin do
@@ -440,6 +441,7 @@ defmodule Tempus.Slots.Stream do
     end
   end
 
+  @dialyzer {:nowarn_function, [shift_week_keep_time: 1]}
   defp shift_week_keep_time(%Slot{from: %DateTime{} = from, to: %DateTime{} = to} = slot) do
     result = Slot.shift(slot, by: 7, unit: :day)
 
