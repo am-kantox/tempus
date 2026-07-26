@@ -214,17 +214,51 @@ defmodule Tempus.Test do
 
   describe "Slot advanced operations" do
     test "gap/1" do
-      s1 = %Slot{from: ~U[2020-01-01 00:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: false, to_open: true}
-      s2 = %Slot{from: ~U[2020-01-01 14:00:00Z], to: ~U[2020-01-01 18:00:00Z], from_open: false, to_open: true}
-      assert %Slot{from: ~U[2020-01-01 12:00:00Z], to: ~U[2020-01-01 14:00:00Z], from_open: false, to_open: true} = Slot.gap([s1, s2])
-      assert %Slot{from: ~U[2020-01-01 12:00:00Z], to: ~U[2020-01-01 14:00:00Z], from_open: false, to_open: true} = Slot.gap([s2, s1])
-      assert %Slot{from: ~U[2020-01-01 12:00:00Z], to: nil, from_open: false, to_open: true} = Slot.gap([%Slot{from: nil, to: ~U[2020-01-01 12:00:00Z]}])
-      assert %Slot{from: nil, to: ~U[2020-01-01 14:00:00Z], from_open: true, to_open: true} = Slot.gap([%Slot{from: ~U[2020-01-01 14:00:00Z], to: nil}])
+      s1 = %Slot{
+        from: ~U[2020-01-01 00:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      s2 = %Slot{
+        from: ~U[2020-01-01 14:00:00Z],
+        to: ~U[2020-01-01 18:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      assert %Slot{
+               from: ~U[2020-01-01 12:00:00Z],
+               to: ~U[2020-01-01 14:00:00Z],
+               from_open: false,
+               to_open: true
+             } = Slot.gap([s1, s2])
+
+      assert %Slot{
+               from: ~U[2020-01-01 12:00:00Z],
+               to: ~U[2020-01-01 14:00:00Z],
+               from_open: false,
+               to_open: true
+             } = Slot.gap([s2, s1])
+
+      assert %Slot{from: ~U[2020-01-01 12:00:00Z], to: nil, from_open: false, to_open: true} =
+               Slot.gap([%Slot{from: nil, to: ~U[2020-01-01 12:00:00Z]}])
+
+      assert %Slot{from: nil, to: ~U[2020-01-01 14:00:00Z], from_open: true, to_open: true} =
+               Slot.gap([%Slot{from: ~U[2020-01-01 14:00:00Z], to: nil}])
+
       assert %Slot{from: nil, to: nil, from_open: true, to_open: true} = Slot.gap([])
     end
 
     test "shift/2 and shift_tz/3" do
-      s = %Slot{from: ~U[2020-01-01 10:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: false, to_open: true}
+      s = %Slot{
+        from: ~U[2020-01-01 10:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
       shifted = Slot.shift(s, by: 1, unit: :hour)
       assert DateTime.compare(shifted.from, ~U[2020-01-01 11:00:00Z]) == :eq
       assert DateTime.compare(shifted.to, ~U[2020-01-01 13:00:00Z]) == :eq
@@ -246,9 +280,26 @@ defmodule Tempus.Test do
     end
 
     test "disjoint?/2 and neighbour?/2" do
-      s1 = %Slot{from: ~U[2020-01-01 10:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: false, to_open: true}
-      s2 = %Slot{from: ~U[2020-01-01 12:00:00Z], to: ~U[2020-01-01 14:00:00Z], from_open: false, to_open: true}
-      s3 = %Slot{from: ~U[2020-01-01 13:00:00Z], to: ~U[2020-01-01 15:00:00Z], from_open: false, to_open: true}
+      s1 = %Slot{
+        from: ~U[2020-01-01 10:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      s2 = %Slot{
+        from: ~U[2020-01-01 12:00:00Z],
+        to: ~U[2020-01-01 14:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      s3 = %Slot{
+        from: ~U[2020-01-01 13:00:00Z],
+        to: ~U[2020-01-01 15:00:00Z],
+        from_open: false,
+        to_open: true
+      }
 
       assert Slot.disjoint?(s1, s2)
       assert Slot.disjoint?(s1, s3)
@@ -277,9 +328,27 @@ defmodule Tempus.Test do
   describe "Guards edge cases" do
     test "is_slot_equal/2 and is_datetime_covered/2" do
       import Tempus.Guards
-      s1 = %Slot{from: ~U[2020-01-01 10:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: false, to_open: true}
-      s2 = %Slot{from: ~U[2020-01-01 10:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: false, to_open: true}
-      s3 = %Slot{from: ~U[2020-01-01 10:00:00Z], to: ~U[2020-01-01 12:00:00Z], from_open: true, to_open: true}
+
+      s1 = %Slot{
+        from: ~U[2020-01-01 10:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      s2 = %Slot{
+        from: ~U[2020-01-01 10:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: false,
+        to_open: true
+      }
+
+      s3 = %Slot{
+        from: ~U[2020-01-01 10:00:00Z],
+        to: ~U[2020-01-01 12:00:00Z],
+        from_open: true,
+        to_open: true
+      }
 
       assert is_slot_equal(s1, s2)
       refute is_slot_equal(s1, s3)
