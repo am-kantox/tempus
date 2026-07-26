@@ -98,7 +98,7 @@ defmodule Tempus.MixProject do
       logo: "stuff/#{@app}-48x48.png",
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: %{"stuff/images" => "assets"},
-      extras: ~w[README.md stuff/background.md stuff/getting-started.md],
+      extras: ~w[README.md stuff/background.md stuff/getting-started.md stuff/tempus_vs_tempo.md],
       groups_for_modules: [
         Helpers: [Tempus.Crontab, Tempus.Guards, Tempus.Sigils],
         Core: [Tempus.Slot, Tempus.Slots],
