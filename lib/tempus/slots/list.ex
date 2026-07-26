@@ -11,8 +11,8 @@ defmodule Tempus.Slots.List do
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|}]
       ...> Enum.into(slots, %Tempus.Slots.List{})
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
-        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}]}
       iex> Enum.map(slots, & &1.from)
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
@@ -51,7 +51,7 @@ defmodule Tempus.Slots.List do
 
       iex> Tempus.Slots.List.add(%Tempus.Slots.List{}, Tempus.Slot.wrap(~D|2020-08-07|))
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}]}
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}]}
 
       iex> %Tempus.Slots.List{}
       ...> |> Tempus.Slots.List.add(Tempus.Slot.wrap(~D|2020-08-07|))
@@ -59,8 +59,8 @@ defmodule Tempus.Slots.List do
       ...> |> Tempus.Slots.List.add(%Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
-        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]}
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}]}
   """
   @spec add(t(), Slot.origin(), keyword()) :: t()
   @telemetria level: :debug
@@ -115,14 +115,14 @@ defmodule Tempus.Slots.List do
       ...> ]
       iex> Tempus.Slots.merge([%Tempus.Slots{slots: slots}, other]).slots
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
-        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]}
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z], from_open: false, to_open: true}]}
       iex> %Tempus.Slots{slots: slots} |> Tempus.Slots.merge(Tempus.Slots.wrap(other, Tempus.Slots.Stream)) |> Enum.to_list()
       [
-        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
-        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]
+        %Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z], from_open: false, to_open: true}]
   """
   @spec merge(t(), t() | Tempus.Slots.Stream.t(), keyword()) :: t()
   @telemetria level: :debug
@@ -206,20 +206,20 @@ defmodule Tempus.Slots.List do
       ...> |> Enum.into(%Tempus.Slots.List{})
       ...> |> Tempus.Slots.List.inverse()
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil}]}
+        %Tempus.Slot{from: nil, to: ~U[2020-08-07 00:00:00.000000Z], from_open: true, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-10 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil, from_open: false, to_open: true}]}
 
       iex> [
-      ...>   %Tempus.Slot{to: ~U[2020-08-08 23:59:59.999999Z]},
+      ...>   %Tempus.Slot{to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true},
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
-      ...>   %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z]}
+      ...>   %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true}
       ...> ] |> Enum.into(%Tempus.Slots.List{})
       ...> |> Tempus.Slots.List.inverse()
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]}
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-10 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true}
       ]}
   """
   @spec inverse(Slots.List.t(), keyword()) :: Slots.List.t()
@@ -233,20 +233,34 @@ defmodule Tempus.Slots.List do
     do: %Slots.List{slots: do_inverse(list, {[], nil})}
 
   defp do_inverse([], {slots, nil}), do: Enum.reverse(slots)
-  defp do_inverse([], {slots, dt}), do: do_inverse([], {add_inversed_slot(dt, nil, slots), nil})
 
-  defp do_inverse([%Slot{} = h | t], {[], nil}) when is_slot_open(h),
-    do: do_inverse(t, {[], h.to})
+  defp do_inverse([], {slots, last_to}),
+    do: do_inverse([], {add_inversed_slot(last_to, nil, slots), nil})
 
-  defp do_inverse([%Slot{} = h | t], {slots, dt}),
-    do: do_inverse(t, {add_inversed_slot(dt, h.from, slots), h.to})
+  defp do_inverse([%Slot{} = h | t], {[], nil}) when is_slot_open(h) and is_nil(h.from),
+    do: do_inverse(t, {[], {h.to, h.to_open}})
 
-  defp add_inversed_slot(from, to, slots) do
-    case Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1) do
-      void() -> slots
-      slot -> [slot | slots]
-    end
+  defp do_inverse([%Slot{} = h | t], {slots, last_to}),
+    do:
+      do_inverse(t, {add_inversed_slot(last_to, {h.from, h.from_open}, slots), {h.to, h.to_open}})
+
+  defp add_inversed_slot(nil, {to, to_open}, slots) do
+    slot = %Slot{from: nil, to: to, from_open: true, to_open: not to_open}
+    if Slot.valid?(slot), do: [slot | slots], else: slots
   end
+
+  defp add_inversed_slot({from, from_open}, nil, slots) when not is_nil(from) do
+    slot = %Slot{from: from, to: nil, from_open: not from_open, to_open: true}
+    if Slot.valid?(slot), do: [slot | slots], else: slots
+  end
+
+  defp add_inversed_slot({from, from_open}, {to, to_open}, slots)
+       when not is_nil(from) and not is_nil(to) do
+    slot = %Slot{from: from, to: to, from_open: not from_open, to_open: not to_open}
+    if Slot.valid?(slot) and DateTime.compare(from, to) == :lt, do: [slot | slots], else: slots
+  end
+
+  defp add_inversed_slot(_from, _to, slots), do: slots
 
   @doc """
   Splits the slots by the pivot given as a `Slot.t` or as a function.
@@ -267,13 +281,13 @@ defmodule Tempus.Slots.List do
       ...> |> Enum.into(%Tempus.Slots.List{})
       iex> slots |> Tempus.Slots.List.split(~U|2020-08-09T12:00:00Z|)
       {
-        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
-        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+        [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true}],
+        [%Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-13 00:00:00.000000Z], from_open: false, to_open: true}]
       }
       iex> slots |> Tempus.Slots.List.split(&is_slot_coming_before(Tempus.Slot.wrap(~U|2020-08-09T12:00:00Z|), &1))
       {
-        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
-        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+        [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true}],
+        [%Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-13 00:00:00.000000Z], from_open: false, to_open: true}]
       }
   """
   @spec split(t(), Slots.locator(), keyword()) :: {[Slot.t()], [Slot.t()]}
@@ -409,10 +423,10 @@ defmodule Tempus.Slots.List do
       {:ok, %Slots.List{slots: head}, %Slots.List{slots: tail}}
     end
 
-    def merge(%Slots.List{} = slots, %_{} = other, options),
+    def merge(%Slots.List{} = slots, %_{} = other, options \\ []),
       do: {:ok, Slots.List.merge(slots, other, options)}
 
-    def inverse(%Slots.List{} = slots, options),
+    def inverse(%Slots.List{} = slots, options \\ []),
       do: {:ok, Slots.List.inverse(slots, options)}
   end
 

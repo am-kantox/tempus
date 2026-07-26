@@ -22,6 +22,12 @@ defmodule Tempus.Test do
     to = ~U[2020-08-12 12:00:00.000000Z]
 
     assert {:ok, %Slot{from: ^from, to: ^to}} = Tempus.Slot.new(from, to)
+    assert {:ok, %Slot{from: nil, to: ^to, from_open: true}} = Tempus.Slot.new(nil, to)
+    assert {:ok, %Slot{from: ^from, to: nil, to_open: true}} = Tempus.Slot.new(from, nil)
+
+    assert {:ok, %Slot{from: nil, to: nil, from_open: true, to_open: true}} =
+             Tempus.Slot.new(nil, nil)
+
     assert {:error, :invalid_input} = Tempus.Slot.new(42, to)
     assert {:error, :invalid_input} = Tempus.Slot.new(from, 42)
     assert %Slot{from: ^from, to: ^to} = Tempus.Slot.new!(from, to)
@@ -56,27 +62,6 @@ defmodule Tempus.Test do
     plus_zero_wdays = Tempus.days_ahead(schedule, ~D|2020-08-06|, 0)
     assert Date.from_iso8601!("2020-08-07") == hd(plus_zero_wdays)
   end
-
-  # test "free?/3" do
-  #   close = fn
-  #     true -> DateTime.from_naive!(~N|2018-01-04 21:00:00|, "America/New_York")
-  #     false -> DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York")
-  #   end
-
-  #   open = DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
-
-  #   assert Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(false).from, -1, :minute))
-  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(false).from, 1, :minute))
-
-  #   assert Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, 1, :minute))
-  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, -1, :minute))
-
-  #   assert Tempus.free?(Pair.new!("USDILS"), DateTime.add(close.(true).from, -1, :minute))
-  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(close.(true).from, 1, :minute))
-
-  #   assert Tempus.free?(Pair.new!("USDILS"), DateTime.add(open, 1, :minute))
-  #   refute Tempus.free?(Pair.new!("USDEUR"), DateTime.add(open, -1, :minute))
-  # end
 
   test "slice/4" do
     for kind <- [:list, :stream] do
@@ -157,19 +142,27 @@ defmodule Tempus.Test do
     assert Enum.take(Tempus.Slots.merge([slots, stream], join: true), 4) == [
              %Tempus.Slot{
                from: ~U[2020-08-06 00:00:00.000000Z],
-               to: ~U[2020-08-06 23:59:59.999999Z]
+               to: ~U[2020-08-07 00:00:00.000000Z],
+               from_open: false,
+               to_open: true
              },
              %Tempus.Slot{
                from: ~U[2020-08-08 00:00:00.000000Z],
-               to: ~U[2020-08-10 23:59:59.999999Z]
+               to: ~U[2020-08-11 00:00:00.000000Z],
+               from_open: false,
+               to_open: true
              },
              %Tempus.Slot{
                from: ~U[2020-08-12 00:00:00.000000Z],
-               to: ~U[2020-08-12 23:59:59.999999Z]
+               to: ~U[2020-08-13 00:00:00.000000Z],
+               from_open: false,
+               to_open: true
              },
              %Tempus.Slot{
                from: ~U[2020-08-14 00:00:00.000000Z],
-               to: ~U[2020-08-15 23:59:59.999999Z]
+               to: ~U[2020-08-16 00:00:00.000000Z],
+               from_open: false,
+               to_open: true
              }
            ]
   end
@@ -178,22 +171,18 @@ defmodule Tempus.Test do
     slots =
       [
         Tempus.Slot.wrap(~D|2020-08-07|),
-        Tempus.Slot.shift(
-          %Tempus.Slot{
-            from: ~U|2020-08-08 01:01:00Z|,
-            to: ~U|2020-08-08 01:02:00Z|
-          },
-          to: -1,
-          unit: :microsecond
-        ),
-        Tempus.Slot.shift(
-          %Tempus.Slot{
-            from: ~U|2020-08-08 01:03:00Z|,
-            to: ~U|2020-08-08 01:04:00Z|
-          },
-          to: -1,
-          unit: :microsecond
-        )
+        %Tempus.Slot{
+          from: ~U|2020-08-08 01:01:00Z|,
+          to: ~U|2020-08-08 01:02:00Z|,
+          from_open: false,
+          to_open: true
+        },
+        %Tempus.Slot{
+          from: ~U|2020-08-08 01:03:00Z|,
+          to: ~U|2020-08-08 01:04:00Z|,
+          from_open: false,
+          to_open: true
+        }
       ]
       |> Enum.into(%Tempus.Slots{})
 

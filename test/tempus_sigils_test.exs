@@ -9,7 +9,9 @@ defmodule Tempus.Sigils.Test do
   test "sigils" do
     assert ~I[2021-03-30]d == %Slot{
              from: ~U[2021-03-30 00:00:00.000000Z],
-             to: ~U[2021-03-30 23:59:59.999999Z]
+             to: ~U[2021-03-31 00:00:00.000000Z],
+             from_open: false,
+             to_open: true
            }
 
     assert ~I[07:00:00]t == %Slot{
@@ -26,7 +28,9 @@ defmodule Tempus.Sigils.Test do
                  minute: 0,
                  second: 0,
                  microsecond: {0, 0}
-             }
+             },
+             from_open: false,
+             to_open: false
            }
   end
 
@@ -34,12 +38,12 @@ defmodule Tempus.Sigils.Test do
     assert capture_io(fn ->
              # credo:disable-for-next-line
              IO.inspect(~I[2021-03-30]d, custom_options: [fancy: true])
-           end) == "𝕥(2021-03-30T00:00:00.000000Z → 2021-03-30T23:59:59.999999Z)\n"
+           end) == "𝕥[2021-03-30T00:00:00.000000Z → 2021-03-31T00:00:00.000000Z)\n"
 
     assert capture_io(fn ->
              # credo:disable-for-next-line
              IO.inspect(~I[2021-03-30]d, custom_options: [fancy: :emoji])
-           end) == "⌚(2021-03-30T00:00:00.000000Z → 2021-03-30T23:59:59.999999Z)\n"
+           end) == "⌚[2021-03-30T00:00:00.000000Z → 2021-03-31T00:00:00.000000Z)\n"
 
     slots =
       Enum.into(
@@ -51,12 +55,12 @@ defmodule Tempus.Sigils.Test do
              # credo:disable-for-next-line
              IO.inspect(slots, custom_options: [truncate: true, fancy: :emoji])
            end) ==
-             "#𝕋<𝕥ˡ<[⌚(2020-08-06T00:00:00.000000Z → 2020-08-06T23:59:59.999999Z),\n \"… ‹3 more› …\",\n ⌚(2020-08-14T00:00:00.000000Z → 2020-08-14T23:59:59.999999Z)]>>\n"
+             "#𝕋<𝕥ˡ<[⌚[2020-08-06T00:00:00.000000Z → 2020-08-07T00:00:00.000000Z),\n \"… ‹3 more› …\",\n ⌚[2020-08-14T00:00:00.000000Z → 2020-08-15T00:00:00.000000Z)]>>\n"
 
     assert capture_io(fn ->
              # credo:disable-for-next-line
              IO.inspect(slots, custom_options: [truncate: 1, fancy: :emoji])
            end) ==
-             "#𝕋<𝕥ˡ<[⌚(2020-08-06T00:00:00.000000Z → 2020-08-06T23:59:59.999999Z),\n \"… ‹2 more› …\",\n ⌚(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z),\n ⌚(2020-08-14T00:00:00.000000Z → 2020-08-14T23:59:59.999999Z)]>>\n"
+             "#𝕋<𝕥ˡ<[⌚[2020-08-06T00:00:00.000000Z → 2020-08-07T00:00:00.000000Z),\n \"… ‹2 more› …\",\n ⌚[2020-08-12T00:00:00.000000Z → 2020-08-13T00:00:00.000000Z),\n ⌚[2020-08-14T00:00:00.000000Z → 2020-08-15T00:00:00.000000Z)]>>\n"
   end
 end

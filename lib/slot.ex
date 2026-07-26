@@ -12,13 +12,15 @@ defmodule Tempus.Slot do
   @typedoc "A timeslot to be used in `Tempus`"
   @type t :: %__MODULE__{
           from: nil | DateTime.t(),
-          to: nil | DateTime.t()
+          to: nil | DateTime.t(),
+          from_open: boolean(),
+          to_open: boolean()
         }
 
   @typedoc "The origin used in comparisons and calculations"
   @type origin :: Slot.t() | Date.t() | DateTime.t() | nil
 
-  defstruct [:from, :to]
+  defstruct [:from, :to, from_open: false, to_open: true]
 
   @spec new([{:from, origin()} | {:to, origin()}]) :: {:ok, t()} | {:error, any()}
   @doc """
@@ -27,9 +29,9 @@ defmodule Tempus.Slot do
   ## Examples
 
       iex> Tempus.Slot.new(from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|)
-      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}}
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|, from_open: false, to_open: false}}
       iex> Tempus.Slot.new(%{from: ~D|2015-09-30|, to: ~U|2015-10-01T12:00:00Z|})
-      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}}
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|, from_open: false, to_open: false}}
   """
   def new(from_to), do: new(from_to[:from], from_to[:to])
 
@@ -42,22 +44,31 @@ defmodule Tempus.Slot do
 
       iex> import Tempus.Sigils
       iex> Tempus.Slot.new(~U|2015-09-30 00:00:00Z|, ~U|2015-10-01 01:00:00Z|)
-      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}}
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|, from_open: false, to_open: false}}
       iex> Tempus.Slot.new(~D|2015-09-30|, ~U|2015-10-01T12:00:00Z|)
-      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}}
+      {:ok, %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|, from_open: false, to_open: false}}
       iex> Tempus.Slot.new(nil, nil)
       {:ok, Tempus.Slot.id()}
       iex> Tempus.Slot.new(~D|2015-09-30|, nil)
-      {:ok, ~I(2015-09-30T00:00:00.000000Z → ∞)un}
+      {:ok, %Tempus.Slot{from: ~U[2015-09-30 00:00:00.000000Z], to: nil, from_open: false, to_open: true}}
       iex> Tempus.Slot.new(nil, ~D|2015-09-30|)
-      {:ok, ~I(∞ → 2015-09-30T23:59:59.999999Z)nu}
+      {:ok, %Tempus.Slot{from: nil, to: ~U[2015-10-01 00:00:00.000000Z], from_open: true, to_open: true}}
       iex> Tempus.Slot.new(:ok, :ok)
       {:error, :invalid_input}
   """
   def new(from, to) when not is_origin(from) when not is_origin(to), do: {:error, :invalid_input}
-  def new(nil, nil), do: {:ok, %Tempus.Slot{from: nil, to: nil}}
-  def new(from, nil), do: {:ok, %Tempus.Slot{from: wrap(from).from, to: nil}}
-  def new(nil, to), do: {:ok, %Tempus.Slot{from: nil, to: wrap(to).to}}
+  def new(nil, nil), do: {:ok, %Tempus.Slot{from: nil, to: nil, from_open: true, to_open: true}}
+
+  def new(from, nil) do
+    w = wrap(from)
+    {:ok, %Tempus.Slot{from: w.from, to: nil, from_open: w.from_open, to_open: true}}
+  end
+
+  def new(nil, to) do
+    w = wrap(to)
+    {:ok, %Tempus.Slot{from: nil, to: w.to, from_open: true, to_open: w.to_open}}
+  end
+
   def new(from, to), do: {:ok, [from, to] |> Enum.map(&wrap/1) |> join()}
 
   @spec new!(from :: origin(), to :: origin()) :: t() | no_return
@@ -69,9 +80,9 @@ defmodule Tempus.Slot do
   ## Examples
 
       iex> Tempus.Slot.new!(~U|2015-09-30 00:00:00Z|, ~U|2015-10-01 01:00:00Z|)
-      %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}
+      %Tempus.Slot{from: ~U|2015-09-30 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|, from_open: false, to_open: false}
       iex> Tempus.Slot.new!(~D|2015-09-30|, ~U|2015-10-01T12:00:00Z|)
-      %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|}
+      %Tempus.Slot{from: ~U|2015-09-30 00:00:00.000000Z|, to: ~U|2015-10-01 12:00:00Z|, from_open: false, to_open: false}
       iex> Tempus.Slot.new!(:ok, :ok)
       ** (ArgumentError) malformed from/to argument, expected `origin`
   """
@@ -90,17 +101,17 @@ defmodule Tempus.Slot do
   """
   defmacro void do
     quote do
-      %Slot{from: nil, to: nil}
+      %Slot{from: nil, to: nil, from_open: true, to_open: true}
     end
   end
 
-  @doc "Identity element, void slot `~I[nil → nil]`"
-  @spec id :: Slot.t()
-  def id, do: void()
+  @doc "Identity element, void slot `~I(nil → nil)`"
+  @spec id :: %Slot{from: nil, to: nil, from_open: true, to_open: true}
+  def id, do: %Slot{from: nil, to: nil, from_open: true, to_open: true}
 
   @spec valid?(slot :: Slot.t()) :: boolean()
   @doc """
-  Checks whether the `Slot` is valid (to > from) or not.
+  Checks whether the `Slot` is valid (to > from, or to == from if closed point) or not.
 
   ## Examples
 
@@ -118,26 +129,32 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.valid?(:ok)
       false
   """
+  def valid?(%Slot{from: nil, to: nil}), do: true
   def valid?(%Slot{from: nil, to: %DateTime{}}), do: true
   def valid?(%Slot{from: %DateTime{}, to: nil}), do: true
 
-  def valid?(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}),
-    do: DateTime.compare(from, to) != :gt
+  def valid?(%Slot{from: %DateTime{} = from, to: %DateTime{} = to, from_open: fo, to_open: to_op}) do
+    case DateTime.compare(from, to) do
+      :lt -> true
+      :eq -> not fo and not to_op
+      :gt -> false
+    end
+  end
 
   def valid?(_), do: false
 
   @doc """
-  Splits the slot given asa first argument to two on borders given as a second slot.
+  Splits the slot given as a first argument to two on borders given as a second slot.
 
   ## Examples
 
       iex> outer = Tempus.Slot.wrap(~D[2023-04-12])
       ...> {:ok, inner} = Tempus.Slot.new(~U[2023-04-12 12:00:00Z], ~U[2023-04-12 13:00:00Z])
       iex> Tempus.Slot.xor(outer, inner)
-      [%Tempus.Slot{from: ~U[2023-04-12 00:00:00.000000Z], to: ~U[2023-04-12 12:00:00Z]},
-       %Tempus.Slot{from: ~U[2023-04-12 13:00:00Z], to: ~U[2023-04-12 23:59:59.999999Z]}]
+      [%Tempus.Slot{from: ~U[2023-04-12 00:00:00.000000Z], to: ~U[2023-04-12 12:00:00Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2023-04-12 13:00:00Z], to: ~U[2023-04-13 00:00:00.000000Z], from_open: true, to_open: true}]
       iex> Tempus.Slot.xor(outer, inner) == Tempus.Slot.xor(inner, outer)
-      true
+      false
       iex> {:ok, past} = Tempus.Slot.new(~U[2020-04-12 12:00:00Z], ~U[2020-04-12 13:00:00Z])
       ...> Tempus.Slot.xor(past, inner)
       [past, inner]
@@ -154,12 +171,28 @@ defmodule Tempus.Slot do
   def xor(outer, inner) when is_slot_border(inner.from, outer) or is_slot_border(inner.to, outer),
     do: [Slot.join(inner, outer)]
 
-  def xor(outer, inner), do: [Slot.new!(outer.from, inner.from), Slot.new!(inner.to, outer.to)]
+  def xor(outer, inner) do
+    s1 = %Slot{
+      from: outer.from,
+      to: inner.from,
+      from_open: outer.from_open,
+      to_open: not inner.from_open
+    }
+
+    s2 = %Slot{
+      from: inner.to,
+      to: outer.to,
+      from_open: not inner.to_open,
+      to_open: outer.to_open
+    }
+
+    Enum.filter([s1, s2], &valid?/1)
+  end
 
   @spec cover?(slot :: Slot.t(), dt :: origin(), strict? :: boolean()) ::
           boolean()
   @doc """
-  Checks whether to `Slot` covers the data/datetime passed as a second argument.
+  Checks whether the `Slot` covers the date/datetime passed as a second argument.
 
   ## Examples
 
@@ -172,13 +205,11 @@ defmodule Tempus.Slot do
       iex> Tempus.Slot.cover?(slot, dt_between)
       true
       iex> Tempus.Slot.cover?(slot, dt_to)
-      true
-      iex> Tempus.Slot.cover?(slot, dt_to, true)
       false
+      iex> Tempus.Slot.cover?(slot, dt_from)
+      true
       iex> Tempus.Slot.cover?(slot, d_from)
       true
-      iex> Tempus.Slot.cover?(slot, d_from, true)
-      false
       iex> Tempus.Slot.cover?(slot, ~U|2000-01-01 00:00:00Z|)
       false
       iex> Tempus.Slot.cover?(slot, d_to)
@@ -210,9 +241,6 @@ defmodule Tempus.Slot do
       iex> inner = %Tempus.Slot{from: ~U|2015-09-01 00:00:00Z|, to: ~U|2015-09-01 01:00:00Z|}
       iex> Tempus.Slot.disjoint?(slot, inner)
       false
-      iex> inner = %Tempus.Slot{from: ~U|2015-09-01 00:00:00Z|, to: ~U|2015-10-01 01:00:00Z|}
-      iex> Tempus.Slot.disjoint?(slot, inner)
-      false
       iex> outer = %Tempus.Slot{from: ~U|2015-10-01 00:00:01Z|, to: ~U|2015-10-01 01:00:00Z|}
       iex> Tempus.Slot.disjoint?(slot, outer)
       true
@@ -221,29 +249,28 @@ defmodule Tempus.Slot do
   """
   def disjoint?(%Slot{} = s1, %Slot{} = s2) when is_joint(s1, s2), do: false
   def disjoint?(%Slot{}, %Slot{}), do: true
-  def disjoint?(s1, s2), do: [s1, s2] |> Enum.map(&wrap/1) |> Enum.reduce(&disjoint?/2)
+  def disjoint?(s1, s2), do: disjoint?(wrap(s1), wrap(s2))
 
   @doc """
-  Returns `true` if two slots are neighbours, `false` otherwise.
+  Returns `true` if two slots are neighbours (touch at a boundary), `false` otherwise.
 
   ## Examples
 
-      iex> slot = %Tempus.Slot{from: ~U|2015-09-01 00:00:00Z|, to: ~U|2015-10-01 23:59:59Z|}
-      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-02|))
+      iex> slot = Tempus.Slot.wrap(~D|2015-09-01|)
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-09-02|))
       true
       iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-08-31|))
       true
-      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-01|))
-      false
-      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-10-03|))
+      iex> Tempus.Slot.neighbour?(slot, Tempus.Slot.wrap(~D|2015-09-03|))
       false
   """
   @spec neighbour?(s1 :: origin(), s2 :: origin()) :: boolean()
   def neighbour?(s1, s2) do
-    [%Slot{to: to}, %Slot{from: from}] = [s1, s2] |> Enum.map(&wrap/1) |> Enum.sort(Slot)
+    s1 = wrap(s1)
+    s2 = wrap(s2)
 
-    not is_nil(to) and not is_nil(from) and DateTime.compare(from, to) == :gt and
-      DateTime.diff(from, to, :second) <= 1
+    (not is_nil(s1.to) and not is_nil(s2.from) and is_datetime_equal(s1.to, s2.from)) or
+      (not is_nil(s2.to) and not is_nil(s1.from) and is_datetime_equal(s2.to, s1.from))
   end
 
   @spec intersect(slots :: Enum.t()) :: Slot.t() | nil
@@ -257,41 +284,10 @@ defmodule Tempus.Slot do
 
       iex> Tempus.Slot.intersect([%Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]},
       ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}])
-      %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}
-
-      iex> Tempus.Slot.intersect([%Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil},
-      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}])
-      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}
+      %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z], from_open: true, to_open: true}
 
       iex> Tempus.Slot.intersect([~D|2020-09-30|, Tempus.Slot.id()])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:59:59.999999Z]}
-
-      iex> Tempus.Slot.intersect([Tempus.Slot.id(), ~D|2020-09-30|])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:59:59.999999Z]}
-
-      iex> Tempus.Slot.intersect([~D|2020-09-30|,
-      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}])
-      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
-
-      iex> Tempus.Slot.intersect([~D|2020-09-30|,
-      ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:00:00Z]}
-
-      iex> Tempus.Slot.intersect([
-      ...>   %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: nil}, ~D|2020-09-30|])
-      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
-
-      iex> Tempus.Slot.intersect([
-      ...>   %Tempus.Slot{from: nil, to: ~U[2020-09-30 23:00:00Z]}, ~D|2020-09-30|])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-09-30 23:00:00Z]}
-
-      iex> Tempus.Slot.intersect([Tempus.Slot.wrap(~D|2020-09-30|),
-      ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
-      %Tempus.Slot{from: ~U[2020-09-30 23:00:00Z], to: ~U[2020-09-30 23:59:59.999999Z]}
-
-      iex> Tempus.Slot.intersect([~D|2020-09-30|, ~D|2000-09-30|,
-      ...>   %Tempus.Slot{from: ~U|2020-09-30 23:00:00Z|, to: ~U|2020-10-02 00:00:00Z|}])
-      nil
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-01 00:00:00.000000Z], from_open: false, to_open: true}
   """
   def intersect(slots) do
     Enum.reduce(slots, fn
@@ -308,23 +304,41 @@ defmodule Tempus.Slot do
         slot = wrap(slot)
         acc = wrap(acc)
 
-        if disjoint?(acc, slot),
-          do: nil,
-          else: %Slot{from: intersect_from(slot, acc), to: intersect_to(slot, acc)}
+        if disjoint?(acc, slot) do
+          nil
+        else
+          {from, fo} = intersect_from(slot, acc)
+          {to, to_op} = intersect_to(slot, acc)
+          %Slot{from: from, to: to, from_open: fo, to_open: to_op}
+        end
     end)
   end
 
-  @spec intersect_from(Slot.t(), Slot.t()) :: DateTime.t() | nil
-  defp intersect_from(%Slot{from: nil}, %Slot{from: nil}), do: nil
-  defp intersect_from(%Slot{from: f1}, %Slot{from: nil}), do: f1
-  defp intersect_from(%Slot{from: nil}, %Slot{from: f2}), do: f2
-  defp intersect_from(%Slot{from: f1}, %Slot{from: f2}), do: Enum.max([f1, f2], DateTime)
+  @spec intersect_from(Slot.t(), Slot.t()) :: {DateTime.t() | nil, boolean()}
+  defp intersect_from(%Slot{from: nil}, %Slot{from: nil}), do: {nil, true}
+  defp intersect_from(%Slot{from: f1, from_open: fo1}, %Slot{from: nil}), do: {f1, fo1}
+  defp intersect_from(%Slot{from: nil}, %Slot{from: f2, from_open: fo2}), do: {f2, fo2}
 
-  @spec intersect_to(Slot.t(), Slot.t()) :: DateTime.t() | nil
-  defp intersect_to(%Slot{to: nil}, %Slot{to: nil}), do: nil
-  defp intersect_to(%Slot{to: t1}, %Slot{to: nil}), do: t1
-  defp intersect_to(%Slot{to: nil}, %Slot{to: t2}), do: t2
-  defp intersect_to(%Slot{to: t1}, %Slot{to: t2}), do: Enum.min([t1, t2], DateTime)
+  defp intersect_from(%Slot{from: f1, from_open: fo1}, %Slot{from: f2, from_open: fo2}) do
+    case DateTime.compare(f1, f2) do
+      :gt -> {f1, fo1}
+      :lt -> {f2, fo2}
+      :eq -> {f1, fo1 or fo2}
+    end
+  end
+
+  @spec intersect_to(Slot.t(), Slot.t()) :: {DateTime.t() | nil, boolean()}
+  defp intersect_to(%Slot{to: nil}, %Slot{to: nil}), do: {nil, true}
+  defp intersect_to(%Slot{to: t1, to_open: to1}, %Slot{to: nil}), do: {t1, to1}
+  defp intersect_to(%Slot{to: nil}, %Slot{to: t2, to_open: to2}), do: {t2, to2}
+
+  defp intersect_to(%Slot{to: t1, to_open: to1}, %Slot{to: t2, to_open: to2}) do
+    case DateTime.compare(t1, t2) do
+      :lt -> {t1, to1}
+      :gt -> {t2, to2}
+      :eq -> {t1, to1 or to2}
+    end
+  end
 
   @spec join(slots :: Enum.t()) :: Slot.t()
   @doc """
@@ -336,10 +350,10 @@ defmodule Tempus.Slot do
       Tempus.Slot.id()
 
       iex> Tempus.Slot.join([Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|)])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-03 00:00:00.000000Z], from_open: false, to_open: true}
 
       iex> Tempus.Slot.join([~D|2020-09-30|, ~D|2020-10-02|])
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-03 00:00:00.000000Z], from_open: false, to_open: true}
   """
   def join([]), do: void()
   def join([slot | slots]), do: do_join(slots, wrap(slot))
@@ -351,21 +365,37 @@ defmodule Tempus.Slot do
   defp do_join([slot | slots], acc) do
     slot = wrap(slot)
 
-    from =
-      if not is_nil(slot.from) and not is_nil(acc.from) do
-        if DateTime.compare(slot.from, acc.from) == :lt,
-          do: slot.from,
-          else: acc.from
+    {from, from_open} =
+      cond do
+        is_nil(slot.from) or is_nil(acc.from) ->
+          {nil, true}
+
+        DateTime.compare(slot.from, acc.from) == :lt ->
+          {slot.from, slot.from_open}
+
+        DateTime.compare(slot.from, acc.from) == :gt ->
+          {acc.from, acc.from_open}
+
+        true ->
+          {slot.from, slot.from_open and acc.from_open}
       end
 
-    to =
-      if not is_nil(slot.to) and not is_nil(acc.to) do
-        if DateTime.compare(slot.to, acc.to) == :gt,
-          do: slot.to,
-          else: acc.to
+    {to, to_open} =
+      cond do
+        is_nil(slot.to) or is_nil(acc.to) ->
+          {nil, true}
+
+        DateTime.compare(slot.to, acc.to) == :gt ->
+          {slot.to, slot.to_open}
+
+        DateTime.compare(slot.to, acc.to) == :lt ->
+          {acc.to, acc.to_open}
+
+        true ->
+          {slot.to, slot.to_open and acc.to_open}
       end
 
-    do_join(slots, %Slot{from: from, to: to})
+    do_join(slots, %Slot{from: from, to: to, from_open: from_open, to_open: to_open})
   end
 
   @spec join(Slot.t(), Slot.t()) :: Slot.t()
@@ -375,10 +405,10 @@ defmodule Tempus.Slot do
   ### Example
 
       iex> Tempus.Slot.join(Tempus.Slot.wrap(~D|2020-09-30|), Tempus.Slot.wrap(~D|2020-10-02|))
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-03 00:00:00.000000Z], from_open: false, to_open: true}
 
       iex> Tempus.Slot.join(~D|2020-09-30|, ~D|2020-10-02|)
-      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-03 00:00:00.000000Z], from_open: false, to_open: true}
   """
   def join(s1, s2), do: join([s1, s2])
 
@@ -406,7 +436,7 @@ defmodule Tempus.Slot do
   def duration(%Slot{from: %DateTime{}, to: nil}, _), do: :infinity
 
   def duration(%Slot{from: %DateTime{} = from, to: %DateTime{} = to}, unit),
-    do: to |> DateTime.add(1, unit) |> DateTime.diff(from, unit)
+    do: DateTime.diff(to, from, unit)
 
   @spec compare(s1 :: origin(), s2 :: origin(), strict :: boolean()) :: :lt | :gt | :eq | :joint
   @doc """
@@ -419,7 +449,7 @@ defmodule Tempus.Slot do
 
   ### Examples
 
-      iex> slot = %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: ~U[2020-10-02 23:59:59.999999Z]}
+      iex> slot = Tempus.Slot.wrap(~D[2020-09-30])
       iex> slot1 = %Tempus.Slot{from: nil, to: ~U[2020-09-30 00:00:00.000000Z]}
       iex> slot2 = %Tempus.Slot{from: nil, to: DateTime.utc_now()}
       iex> slot3 = %Tempus.Slot{from: ~U[2020-09-30 00:00:00.000000Z], to: nil}
@@ -530,14 +560,13 @@ defmodule Tempus.Slot do
 
   @spec wrap(origin(), DateTime.t()) :: Slot.t()
   @doc """
-  Wraps the argument into a slot. For `DateTime` it’d be a single microsecond.
-  For a `Date`, it would be the whole day, starting at `00:00:00.000000` and
-      ending at `23:59:59:999999`.
+  Wraps the argument into a slot. For `DateTime` it'd be a point slot.
+  For a `Date`, it would be the whole day $[00:00:00.000000 \to 00:00:00.000000\text{ next day})$.
 
   ## Examples
 
       iex> Tempus.Slot.wrap(~D|2020-08-06|)
-      %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-06 23:59:59.999999Z]}
+      %Tempus.Slot{from: ~U[2020-08-06 00:00:00.000000Z], to: ~U[2020-08-07 00:00:00.000000Z], from_open: false, to_open: true}
       iex> Tempus.Slot.wrap(:ok)
       Tempus.Slot.id()
   """
@@ -545,7 +574,7 @@ defmodule Tempus.Slot do
 
   def wrap(nil, origin), do: wrap(DateTime.utc_now(), origin)
   def wrap(%Slot{} = slot, _), do: slot
-  def wrap(%DateTime{} = dt, _), do: %Slot{from: dt, to: dt}
+  def wrap(%DateTime{} = dt, _), do: %Slot{from: dt, to: dt, from_open: false, to_open: false}
 
   def wrap(
         %Time{
@@ -573,7 +602,9 @@ defmodule Tempus.Slot do
     })
   end
 
-  def wrap(%Date{calendar: calendar, day: day, month: month, year: year}, origin) do
+  def wrap(%Date{calendar: calendar, day: day, month: month, year: year} = date, origin) do
+    next_date = Date.add(date, 1)
+
     %Slot{
       from: %DateTime{
         calendar: calendar,
@@ -591,18 +622,20 @@ defmodule Tempus.Slot do
       },
       to: %DateTime{
         calendar: calendar,
-        day: day,
-        hour: 23,
-        microsecond: {999_999, 6},
-        minute: 59,
-        month: month,
-        second: 59,
+        day: next_date.day,
+        hour: 0,
+        microsecond: {0, 6},
+        minute: 0,
+        month: next_date.month,
+        second: 0,
         std_offset: origin.std_offset,
         time_zone: origin.time_zone,
         utc_offset: origin.utc_offset,
-        year: year,
+        year: next_date.year,
         zone_abbr: origin.zone_abbr
-      }
+      },
+      from_open: false,
+      to_open: true
     }
   end
 
@@ -615,7 +648,7 @@ defmodule Tempus.Slot do
             {:to, integer()} | {:from, integer()} | {:by, integer()} | {:unit, System.time_unit()}
           ]
         ) :: Slot.t()
-  def shift(%Slot{from: from, to: to}, action \\ []) do
+  def shift(%Slot{from: from, to: to, from_open: fo, to_open: to_op}, action \\ []) do
     {multiplier, unit} =
       case Keyword.get(action, :unit, :microsecond) do
         :day -> {60 * 60 * 24 * 1_000_000, :microsecond}
@@ -633,20 +666,27 @@ defmodule Tempus.Slot do
       end
       |> Enum.map(&(&1 * multiplier))
 
-    check_shifted(do_shift(from, by_from, unit), do_shift(to, by_to, unit))
+    check_shifted(do_shift(from, by_from, unit), do_shift(to, by_to, unit), fo, to_op)
   end
 
-  @spec check_shifted(maybe_datetime, maybe_datetime) :: Slot.t()
+  @spec check_shifted(maybe_datetime, maybe_datetime, boolean(), boolean()) :: Slot.t()
         when maybe_datetime: nil | DateTime.t()
-  defp check_shifted(nil, nil), do: void()
-  defp check_shifted(nil, to), do: %Slot{from: nil, to: to}
-  defp check_shifted(from, nil), do: %Slot{from: from, to: nil}
+  defp check_shifted(nil, nil, _fo, _to_op),
+    do: %Slot{from: nil, to: nil, from_open: true, to_open: true}
 
-  defp check_shifted(%DateTime{} = from, %DateTime{} = to)
-       when not is_datetime_coming_before(to, from),
-       do: %Slot{from: from, to: to}
+  defp check_shifted(nil, to, _fo, to_op),
+    do: %Slot{from: nil, to: to, from_open: true, to_open: to_op}
 
-  defp check_shifted(_, _), do: void()
+  defp check_shifted(from, nil, fo, _to_op),
+    do: %Slot{from: from, to: nil, from_open: fo, to_open: true}
+
+  defp check_shifted(%DateTime{} = from, %DateTime{} = to, fo, to_op) do
+    if DateTime.compare(to, from) == :lt do
+      void()
+    else
+      %Slot{from: from, to: to, from_open: fo, to_open: to_op}
+    end
+  end
 
   @spec do_shift(maybe_datetime, integer(), System.time_unit()) :: maybe_datetime
         when maybe_datetime: nil | DateTime.t()
@@ -679,28 +719,41 @@ defmodule Tempus.Slot do
      from: DateTime.from_naive!(~N|2018-01-05 21:00:00|, "America/New_York"),
      to: DateTime.from_naive!(~N|2018-01-08 08:59:59|, "Australia/Sydney")
   }
-  #⇒ %Tempus.Slot{from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z]}
+  #⇒ %Tempus.Slot{from: ~U[2018-01-06 02:00:00Z], to: ~U[2018-01-07 21:59:59Z], from_open: false, to_open: true}
   ```
   """
   def shift_tz(
-        %Slot{from: from, to: to},
+        %Slot{from: from, to: to, from_open: fo, to_open: to_op},
         tz \\ "Etc/UTC",
         tz_db \\ Calendar.get_time_zone_database()
       ) do
-    %Slot{from: DateTime.shift_zone!(from, tz, tz_db), to: DateTime.shift_zone!(to, tz, tz_db)}
+    %Slot{
+      from: from && DateTime.shift_zone!(from, tz, tz_db),
+      to: to && DateTime.shift_zone!(to, tz, tz_db),
+      from_open: fo,
+      to_open: to_op
+    }
   end
 
   @spec gap([t()]) :: t()
   @doc false
-  def gap([%Slot{to: from} = prev, %Slot{from: to} = next])
-      when is_slot_coming_before(prev, next),
-      do: shift(%Slot{from: from, to: to}, from: 1, to: -1)
+  def gap([
+        %Slot{to: from, to_open: from_open} = prev,
+        %Slot{from: to, from_open: to_open} = next
+      ])
+      when is_slot_coming_before(prev, next) do
+    %Slot{from: from, to: to, from_open: not from_open, to_open: not to_open}
+  end
 
   def gap([%Slot{} = prev, %Slot{} = next]) when is_slot_coming_before(next, prev),
     do: gap([next, prev])
 
-  def gap([%Slot{from: nil, to: from}]), do: shift(%Slot{from: from, to: nil}, from: 1)
-  def gap([%Slot{from: to, to: nil}]), do: shift(%Slot{from: nil, to: to}, to: -1)
+  def gap([%Slot{from: nil, to: from, to_open: from_open}]),
+    do: %Slot{from: from, to: nil, from_open: not from_open, to_open: true}
+
+  def gap([%Slot{from: to, from_open: to_open, to: nil}]),
+    do: %Slot{from: nil, to: to, from_open: true, to_open: not to_open}
+
   def gap(_), do: void()
 
   defimpl Inspect do
@@ -709,6 +762,11 @@ defmodule Tempus.Slot do
     import Inspect.Algebra
     @fancy_inspect Application.compile_env(:tempus, :inspect, :sigil)
 
+    defp open_bracket(true), do: "("
+    defp open_bracket(false), do: "["
+    defp close_bracket(true), do: ")"
+    defp close_bracket(false), do: "]"
+
     defp value(from, to, _opts) do
       Enum.map_join([from, to], " → ", fn
         nil -> "∞"
@@ -716,7 +774,10 @@ defmodule Tempus.Slot do
       end)
     end
 
-    def inspect(%Tempus.Slot{from: from, to: to}, %Inspect.Opts{custom_options: [_ | _]} = opts) do
+    def inspect(
+          %Tempus.Slot{from: from, to: to, from_open: fo, to_open: to_op},
+          %Inspect.Opts{custom_options: [_ | _]} = opts
+        ) do
       opts.custom_options
       |> Keyword.get(:fancy, @fancy_inspect)
       |> case do
@@ -727,23 +788,27 @@ defmodule Tempus.Slot do
               true -> "𝕥"
             end
 
-          concat([tag, "(", value(from, to, opts), ")"])
+          concat([tag, open_bracket(fo), value(from, to, opts), close_bracket(to_op)])
 
         false ->
-          concat(["#Slot<", to_doc([from: from, to: to], opts), ">"])
+          concat([
+            "#Slot<",
+            to_doc([from: from, to: to, from_open: fo, to_open: to_op], opts),
+            ">"
+          ])
 
         :sigil ->
           case {from, to} do
             {nil, nil} -> "%Tempus.Slot{}"
             {from, nil} -> "%Tempus.Slot{from: " <> inspect(from) <> "}"
             {nil, to} -> "%Tempus.Slot{to: " <> inspect(to) <> "}"
-            {from, to} -> "~I[#{from}|#{to}]"
+            {from, to} -> "~I" <> open_bracket(fo) <> "#{from}|#{to}" <> close_bracket(to_op)
           end
       end
     end
 
-    def inspect(%Tempus.Slot{from: from, to: to}, opts) do
-      concat(["~I(", value(from, to, opts), ")"])
+    def inspect(%Tempus.Slot{from: from, to: to, from_open: fo, to_open: to_op}, opts) do
+      concat(["~I", open_bracket(fo), value(from, to, opts), close_bracket(to_op)])
     end
   end
 end

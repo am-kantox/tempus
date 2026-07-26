@@ -15,8 +15,22 @@ defprotocol Tempus.Slots.Group do
   @doc """
   Flattens the implementation, returning the list back.
   """
+  @spec flatten(t()) :: [Slot.t()]
+  def flatten(slots)
+
+  @doc """
+  Flattens the implementation, returning the list back.
+  """
   @spec flatten(t(), keyword()) :: [Slot.t()]
-  def flatten(slots, options \\ [])
+  def flatten(slots, options)
+
+  @doc """
+  Adds a single `t:Slot.t/0` instance to this `t:Slots.t/1` (which is effectively `Slots.t(t())`)
+    implementation. If `merge/3` implementation returns `{:error, __MODULE__}`,
+    this function would be used to add elements one by one through `reduce/3`.
+  """
+  @spec add(t(), Slot.origin()) :: t()
+  def add(slots, slot)
 
   @doc """
   Adds a single `t:Slot.t/0` instance to this `t:Slots.t/1` (which is effectively `Slots.t(t())`)
@@ -24,26 +38,47 @@ defprotocol Tempus.Slots.Group do
     this function would be used to add elements one by one through `reduce/3`.
   """
   @spec add(t(), Slot.origin(), keyword()) :: t()
-  def add(slots, slot, options \\ [])
+  def add(slots, slot, options)
+
+  @doc """
+  Efficient implementation of merging slots. If this function
+    returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
+  """
+  @spec merge(t(), [Slot.t()] | t()) :: {:ok, t()} | {:error, module()}
+  def merge(slots, other)
 
   @doc """
   Efficient implementation of merging slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
   @spec merge(t(), [Slot.t()] | t(), keyword()) :: {:ok, t()} | {:error, module()}
-  def merge(slots, other, options \\ [])
+  def merge(slots, other, options)
+
+  @doc """
+  Efficient implementation of splitting slots. If this function
+    returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
+  """
+  @spec split(t(), Slots.locator()) :: {:ok, t(), t()} | {:error, module()}
+  def split(slots, locator)
 
   @doc """
   Efficient implementation of splitting slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
   @spec split(t(), Slots.locator(), keyword()) :: {:ok, t(), t()} | {:error, module()}
-  def split(slots, locator, options \\ [])
+  def split(slots, locator, options)
+
+  @doc """
+  Efficient implementation of inversing slots. If this function
+    returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
+  """
+  @spec inverse(t()) :: {:ok, t()} | {:error, module()}
+  def inverse(slots)
 
   @doc """
   Efficient implementation of inversing slots. If this function
     returns `{:error, __MODULE__}`, the `reduce/3` will be used instead.
   """
   @spec inverse(t(), keyword()) :: {:ok, t()} | {:error, module()}
-  def inverse(slots, options \\ [])
+  def inverse(slots, options)
 end

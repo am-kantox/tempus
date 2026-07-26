@@ -8,8 +8,8 @@ defmodule Tempus.Slots.Normalizers do
           nil | non_neg_integer()
   def pop_jid(options) do
     case Keyword.get(options, :join, false) do
-      true -> 1
-      value when is_integer(value) and value > 0 -> value
+      true -> 0
+      value when is_integer(value) and value >= 0 -> value
       false -> nil
       nil -> nil
       other -> tap(nil, fn _ -> warning_jid(other) end)

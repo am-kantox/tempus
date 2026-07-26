@@ -383,14 +383,24 @@ defmodule Tempus.Guards do
       true
   """
   defguard is_slot_coming_before(s1, s2)
-           when is_datetime_coming_before(:erlang.map_get(:to, s1), :erlang.map_get(:from, s2))
+           when is_slot(s1) and is_slot(s2) and
+                  (is_datetime_coming_before(
+                     :erlang.map_get(:to, s1),
+                     :erlang.map_get(:from, s2)
+                   ) or
+                     (is_datetime_equal(
+                        :erlang.map_get(:to, s1),
+                        :erlang.map_get(:from, s2)
+                      ) and
+                        (:erlang.map_get(:to_open, s1) or :erlang.map_get(:from_open, s2))))
 
-  defguardp is_datetime_between(dt, dt1, dt2)
-            when (is_nil(dt1) and is_datetime(dt2) and not is_datetime_coming_before(dt2, dt)) or
-                   (is_nil(dt2) and is_datetime(dt1) and not is_datetime_coming_before(dt, dt1)) or
-                   (is_datetime(dt1) and is_datetime(dt2) and
-                      not is_datetime_coming_before(dt, dt1) and
-                      not is_datetime_coming_before(dt2, dt))
+  defguardp is_from_covered(dt, f, fo)
+            when is_nil(f) or is_datetime_coming_before(f, dt) or
+                   (not fo and is_datetime_equal(dt, f))
+
+  defguardp is_to_covered(dt, t, to_op)
+            when is_nil(t) or is_datetime_coming_before(dt, t) or
+                   (not to_op and is_datetime_equal(dt, t))
 
   @doc """
   Guard to validate if the `DateTime` instance passed as a first argument is covered by the slot.
@@ -405,8 +415,17 @@ defmodule Tempus.Guards do
       false
   """
   defguard is_datetime_covered(dt, s)
-           when is_slot(s) and
-                  is_datetime_between(dt, :erlang.map_get(:from, s), :erlang.map_get(:to, s))
+           when is_slot(s) and is_datetime(dt) and
+                  is_from_covered(
+                    dt,
+                    :erlang.map_get(:from, s),
+                    :erlang.map_get(:from_open, s)
+                  ) and
+                  is_to_covered(
+                    dt,
+                    :erlang.map_get(:to, s),
+                    :erlang.map_get(:to_open, s)
+                  )
 
   @doc """
   Guard to validate if the slot instance passed as a first argument is covered by the slot passed last.
@@ -498,9 +517,9 @@ defmodule Tempus.Guards do
 
       iex> import Tempus.Guards, only: [is_slot_equal: 2]
       ...> import Tempus.Sigils
-      ...> s1 = ~I[2023-04-09 00:00:00Z|2023-04-09 23:59:59.999999Z]
+      ...> s1 = ~I(2023-04-09 00:00:00Z → 2023-04-10 00:00:00Z)
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-09|)
-      ...> s3 = ~I[2023-04-09 00:00:00Z|2023-04-09 23:59:59Z]
+      ...> s3 = ~I(2023-04-09 00:00:00Z → 2023-04-09 23:59:59Z)
       ...> is_slot_equal(s1, s1)
       true
       iex> is_slot_equal(s1, s2)
@@ -517,7 +536,9 @@ defmodule Tempus.Guards do
   defguard is_slot_equal(s1, s2)
            when is_slot(s1) and is_slot(s2) and
                   is_datetime_equal(:erlang.map_get(:from, s1), :erlang.map_get(:from, s2)) and
-                  is_datetime_equal(:erlang.map_get(:to, s1), :erlang.map_get(:to, s2))
+                  is_datetime_equal(:erlang.map_get(:to, s1), :erlang.map_get(:to, s2)) and
+                  :erlang.map_get(:from_open, s1) == :erlang.map_get(:from_open, s2) and
+                  :erlang.map_get(:to_open, s1) == :erlang.map_get(:to_open, s2)
 
   @doc """
   Guard to validate one slot ovelaps another
@@ -526,35 +547,20 @@ defmodule Tempus.Guards do
 
       iex> import Tempus.Guards, only: [is_joint: 2]
       ...> import Tempus.Sigils
-      ...> s1 = ~I[2023-04-09 23:00:00Z|2023-04-10 00:59:59Z]
+      ...> s1 = ~I(2023-04-09 23:00:00Z → 2023-04-10 01:00:00Z)
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_joint(s1, s2)
       true
-      iex> s1 = ~I[2023-04-09 23:00:00Z|2023-04-10 00:00:00Z]
+      iex> s1 = ~I(2023-04-09 23:00:00Z → 2023-04-10 00:00:00Z)
       ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
       ...> is_joint(s1, s2)
-      true
+      false
   """
   @spec is_joint(Slot.t(), Slot.t()) :: boolean()
-  if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
-    defguard is_joint(s1, s2)
-             when is_slot(s1) and is_slot(s2) and
-                    (is_datetime_covered(:erlang.map_get(:from, s1), s2) or
-                       is_datetime_covered(:erlang.map_get(:to, s1), s2) or
-                       is_datetime_covered(:erlang.map_get(:from, s2), s1) or
-                       is_datetime_covered(:erlang.map_get(:to, s2), s1))
-  else
-    defguard is_joint(s1, s2)
-             when is_slot(s1) and is_slot(s2) and
-                    not is_datetime_coming_before(
-                      :erlang.map_get(:to, s1),
-                      :erlang.map_get(:from, s2)
-                    ) and
-                    not is_datetime_coming_before(
-                      :erlang.map_get(:to, s2),
-                      :erlang.map_get(:from, s1)
-                    )
-  end
+  defguard is_joint(s1, s2)
+           when is_slot(s1) and is_slot(s2) and
+                  not is_slot_coming_before(s1, s2) and
+                  not is_slot_coming_before(s2, s1)
 
   if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
     @doc """
@@ -568,11 +574,11 @@ defmodule Tempus.Guards do
         ...> s = %Tempus.Slot{from: from, to: to}
         ...> is_covered(from, s) and is_covered(to, s)
         true
-        iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+        iex> s1 = ~I(2023-04-10 00:00:00Z → 2023-04-11 00:00:00Z)
         ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
         ...> is_covered(s1, s2)
         false
-        iex> s1 = ~I[2023-04-10 00:00:00Z|2023-04-11 00:00:00Z]
+        iex> s1 = ~I(2023-04-10 00:00:00Z → 2023-04-11 00:00:00Z)
         ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
         ...> is_covered(s1, s2)
         false
@@ -653,7 +659,7 @@ defmodule Tempus.Guards do
 
       iex> import Tempus.Guards, only: [joint_in_delta?: 3]
       ...> import Tempus.Sigils
-      ...> s1 = ~I[2023-04-09 23:00:00Z|2023-04-09 23:59:59Z]
+      ...> s1 = ~I(2023-04-09 23:00:00Z → 2023-04-09 23:59:59Z)
       ...> joint_in_delta?(s1, s1, 1)
       true
       iex> s2 = Tempus.Slot.wrap(~D|2023-04-10|)

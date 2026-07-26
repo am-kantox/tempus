@@ -13,7 +13,6 @@ defmodule Tempus.MixProject do
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
       consolidate_protocols: Mix.env() not in [:dev, :test],
-      preferred_cli_env: [quality: :ci, "quality.ci": :ci],
       description: description(),
       package: package(),
       deps: deps(),
@@ -29,15 +28,22 @@ defmodule Tempus.MixProject do
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
       ],
-      preferred_cli_env: [coveralls: :test, "coveralls.github": :test],
       test_coverage: [tool: ExCoveralls]
     ]
   end
 
-  def application,
-    do: [
-      extra_applications: [:logger]
+  def application, do: [extra_applications: [:logger]]
+
+  def cli do
+    [
+      preferred_envs: [
+        quality: :ci,
+        "quality.ci": :ci,
+        coveralls: :test,
+        "coveralls.github": :test
+      ]
     ]
+  end
 
   defp deps do
     [

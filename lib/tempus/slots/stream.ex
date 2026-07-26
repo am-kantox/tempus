@@ -11,8 +11,8 @@ defmodule Tempus.Slots.Stream do
       ...>   %Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|}]
       ...> slots |> Enum.into(slots()) |> Enum.to_list()
-      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
-       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}]
       iex> Enum.map(slots, & &1.from)
       [~U[2020-08-07 00:00:00.000000Z], ~U[2020-08-10 00:00:00.000000Z], ~U[2020-08-07 01:00:00Z]]
   """
@@ -68,7 +68,7 @@ defmodule Tempus.Slots.Stream do
 
       iex> import Tempus.Slots.Stream, only: [slots: 0]
       iex> Tempus.Slots.Stream.add(slots(), Tempus.Slot.wrap(~D|2020-08-07|)) |> Enum.to_list()
-      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-07 23:59:59.999999Z]}]
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}]
 
       iex> %Tempus.Slots.Stream{}
       ...> |> Tempus.Slots.Stream.add(Tempus.Slot.wrap(~D|2020-08-07|))
@@ -76,8 +76,8 @@ defmodule Tempus.Slots.Stream do
       ...> |> Tempus.Slots.Stream.add(%Tempus.Slot{
       ...>       from: ~U|2020-08-07 01:00:00Z|, to: ~U|2020-08-08 01:00:00Z|})
       ...> |> Enum.to_list()
-      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z]},
-       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]}]
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 01:00:00Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}]
   """
   @spec add(t(), Slot.t(), keyword()) :: t()
   @telemetria level: :debug
@@ -151,9 +151,9 @@ defmodule Tempus.Slots.Stream do
       ...>   %Tempus.Slot{from: ~U|2020-08-12 23:00:00Z|, to: ~U|2020-08-12 23:30:00Z|}
       ...> ] |> Enum.into(slots())
       iex> slots |> Tempus.Slots.Stream.merge(other) |> Enum.to_list()
-      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z]},
-       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-10 23:59:59.999999Z]},
-       %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z]}]
+      [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 12:00:00Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2020-08-12 23:00:00Z], to: ~U[2020-08-12 23:30:00Z], from_open: false, to_open: true}]
 
   """
   @spec merge(t(), Slots.container(), keyword()) :: t()
@@ -265,20 +265,20 @@ defmodule Tempus.Slots.Stream do
       ...> ] |> Enum.into(%Tempus.Slots.List{})
       ...> |> Tempus.Slots.List.inverse()
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: nil, to: ~U[2020-08-06 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil}]}
+        %Tempus.Slot{from: nil, to: ~U[2020-08-07 00:00:00.000000Z], from_open: true, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-10 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-13 00:00:00.000000Z], to: nil, from_open: false, to_open: true}]}
 
       iex> [
-      ...>   %Tempus.Slot{to: ~U[2020-08-08 23:59:59.999999Z]},
+      ...>   %Tempus.Slot{to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true},
       ...>   Tempus.Slot.wrap(~D|2020-08-10|),
-      ...>   %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z]}
+      ...>   %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true}
       ...> ] |> Enum.into(%Tempus.Slots.List{})
       ...> |> Tempus.Slots.List.inverse()
       %Tempus.Slots.List{slots: [
-        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-09 23:59:59.999999Z]},
-        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-11 23:59:59.999999Z]}
+        %Tempus.Slot{from: ~U[2020-08-09 00:00:00.000000Z], to: ~U[2020-08-10 00:00:00.000000Z], from_open: false, to_open: true},
+        %Tempus.Slot{from: ~U[2020-08-11 00:00:00.000000Z], to: ~U[2020-08-12 00:00:00.000000Z], from_open: false, to_open: true}
       ]}
   """
   @spec inverse(Slots.Stream.t()) :: Slots.Stream.t()
@@ -290,28 +290,46 @@ defmodule Tempus.Slots.Stream do
 
     last_fun = fn
       nil -> {[], []}
-      dt -> {emit_inversed_slot(dt, nil), []}
+      {dt, dt_open} -> {emit_inversed_slot({dt, dt_open}, nil), []}
     end
 
     after_fun = & &1
 
     reducer = fn
-      void(), nil -> {:halt, :void}
-      slot, nil when is_slot_open(slot) -> {[], slot.to}
-      slot, nil -> {emit_inversed_slot(nil, slot.from), [slot.to]}
-      slot, dt -> {emit_inversed_slot(Enum.min(dt, DateTime), slot.from), [slot.to]}
+      void(), nil ->
+        {:halt, :void}
+
+      slot, nil when is_slot_open(slot) and is_nil(slot.from) ->
+        {[], {slot.to, slot.to_open}}
+
+      slot, nil ->
+        {emit_inversed_slot(nil, {slot.from, slot.from_open}), {slot.to, slot.to_open}}
+
+      slot, {dt, dt_open} ->
+        {emit_inversed_slot({dt, dt_open}, {slot.from, slot.from_open}), {slot.to, slot.to_open}}
     end
 
     stream = Stream.transform(stream, start_fun, reducer, last_fun, after_fun)
     %Slots.Stream{slots: stream}
   end
 
-  defp emit_inversed_slot(from, to) do
-    case Slot.shift(%Slot{from: from, to: to}, from: 1, to: -1) do
-      void() -> []
-      slot -> [slot]
-    end
+  defp emit_inversed_slot(nil, {to, to_open}) when not is_nil(to) do
+    slot = %Slot{from: nil, to: to, from_open: true, to_open: not to_open}
+    if Slot.valid?(slot), do: [slot], else: []
   end
+
+  defp emit_inversed_slot({from, from_open}, nil) when not is_nil(from) do
+    slot = %Slot{from: from, to: nil, from_open: not from_open, to_open: true}
+    if Slot.valid?(slot), do: [slot], else: []
+  end
+
+  defp emit_inversed_slot({from, from_open}, {to, to_open})
+       when not is_nil(from) and not is_nil(to) do
+    slot = %Slot{from: from, to: to, from_open: not from_open, to_open: not to_open}
+    if Slot.valid?(slot) and DateTime.compare(from, to) == :lt, do: [slot], else: []
+  end
+
+  defp emit_inversed_slot(_, _), do: []
 
   @doc """
   Produces a stream of slots wrapped in `Tempus.Slots.Stream`, ensuring the order
@@ -333,8 +351,8 @@ defmodule Tempus.Slots.Stream do
       ...> Tempus.Slots.Stream.iterate(~D|2024-01-20|,
       ...>   &Tempus.Slot.shift(&1, by: rem(&1.from.day, 2) + 1, unit: :day),
       ...>   join: true) |> Enum.take(2)
-      [~I(2024-01-20T00:00:00.000000Z → 2024-01-21T23:59:59.999999Z),
-       ~I(2024-01-23T00:00:00.000000Z → 2024-01-23T23:59:59.999999Z)]
+      [%Tempus.Slot{from: ~U[2024-01-20 00:00:00.000000Z], to: ~U[2024-01-22 00:00:00.000000Z], from_open: false, to_open: true},
+       %Tempus.Slot{from: ~U[2024-01-23 00:00:00.000000Z], to: ~U[2024-01-24 00:00:00.000000Z], from_open: false, to_open: true}]
   """
   @spec iterate(Slot.origin(), (Slot.t() -> Slot.t())) :: Slots.Stream.t()
   @spec iterate(Slot.origin(), (Slot.t() -> Slot.t()), [
@@ -379,12 +397,12 @@ defmodule Tempus.Slots.Stream do
         ~I(2024-01-22T15:00:00.000000Z → 2024-01-29T15:00:00.000000+11:00),
         ~I(2024-01-29T15:00:00.000000Z → 2024-02-05T15:00:00.000000+11:00)]
        ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-01-22"), {1, "09:00:00", "Australia/Sydney"}, {7, "23:00:00", "Etc/UTC"}) |> Enum.take(3)
-       [%Tempus.Slot{from: DateTime.new!(~D"2024-01-29", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-01-28T23:00:00.000000Z|},
-        %Tempus.Slot{from: DateTime.new!(~D"2024-02-05", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-04T23:00:00.000000Z|},
-        %Tempus.Slot{from: DateTime.new!(~D"2024-02-12", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-11T23:00:00.000000Z|}]
+       [%Tempus.Slot{from: DateTime.new!(~D"2024-01-29", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-01-28T23:00:00.000000Z|, from_open: false, to_open: true},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-02-05", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-04T23:00:00.000000Z|, from_open: false, to_open: true},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-02-12", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-02-11T23:00:00.000000Z|, from_open: false, to_open: true}]
        ...> Tempus.Slots.Stream.recurrent(Date.from_iso8601!("2024-03-28"), {1, "09:00:00", "Australia/Sydney"}, {7, "23:00:00", "Etc/UTC"}) |> Enum.take(2)
-       [%Tempus.Slot{from: DateTime.new!(~D"2024-04-01", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-03-31T23:00:00.000000Z|},
-        %Tempus.Slot{from: DateTime.new!(~D"2024-04-08", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-04-07T23:00:00.000000Z|}]
+       [%Tempus.Slot{from: DateTime.new!(~D"2024-04-01", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-03-31T23:00:00.000000Z|, from_open: false, to_open: true},
+        %Tempus.Slot{from: DateTime.new!(~D"2024-04-08", ~T"09:00:00.000000", "Australia/Sydney"), to: ~U|2024-04-07T23:00:00.000000Z|, from_open: false, to_open: true}]
   """
   @spec recurrent(origin :: nil | Date.t(), from :: recurrent_time, to :: recurrent_time) ::
           Slots.t(Slots.Stream)
@@ -446,15 +464,15 @@ defmodule Tempus.Slots.Stream do
     result = Slot.shift(slot, by: 7, unit: :day)
 
     %Slot{
-      from: %DateTime{result.from | hour: from.hour},
-      to: %DateTime{result.to | hour: to.hour}
+      from: %{result.from | hour: from.hour},
+      to: %{result.to | hour: to.hour}
     }
   end
 
   defp collect_joint(%Slot{} = value, fun, join) do
     %Slot{} = next = fun.(value)
 
-    if not is_slot_coming_before(value, next) do
+    if is_slot_coming_before(next, value) do
       raise(
         ArgumentError,
         "Stream values must be increasing, got: [#{inspect(current: value, next: next)}]"
@@ -488,16 +506,16 @@ defmodule Tempus.Slots.Stream do
       ...> |> Enum.into(%Tempus.Slots.Stream{})
       iex> slots |> Tempus.Slots.Stream.split(~U|2020-08-09T12:00:00Z|) |> Tuple.to_list() |> Enum.map(&Enum.to_list/1)
       [
-        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
-        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+        [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true}],
+        [%Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-13 00:00:00.000000Z], from_open: false, to_open: true}]
       ]
       iex> slots
       ...> |> Tempus.Slots.Stream.split(&is_slot_coming_before(Tempus.Slot.wrap(~U|2020-08-09T12:00:00Z|), &1))
       ...> |> Tuple.to_list()
       ...> |> Enum.map(&Enum.to_list/1)
       [
-        [~I(2020-08-07T00:00:00.000000Z → 2020-08-07T23:59:59.999999Z), ~I(2020-08-08T00:00:00.000000Z → 2020-08-08T23:59:59.999999Z)],
-        [~I(2020-08-10T00:00:00.000000Z → 2020-08-10T23:59:59.999999Z), ~I(2020-08-12T00:00:00.000000Z → 2020-08-12T23:59:59.999999Z)]
+        [%Tempus.Slot{from: ~U[2020-08-07 00:00:00.000000Z], to: ~U[2020-08-08 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-08 00:00:00.000000Z], to: ~U[2020-08-09 00:00:00.000000Z], from_open: false, to_open: true}],
+        [%Tempus.Slot{from: ~U[2020-08-10 00:00:00.000000Z], to: ~U[2020-08-11 00:00:00.000000Z], from_open: false, to_open: true}, %Tempus.Slot{from: ~U[2020-08-12 00:00:00.000000Z], to: ~U[2020-08-13 00:00:00.000000Z], from_open: false, to_open: true}]
       ]
   """
   @spec split(t(), Slots.locator(), keyword()) :: {Enumerable.t(Slot.t()), Enumerable.t(Slot.t())}
@@ -623,14 +641,15 @@ defmodule Tempus.Slots.Stream do
       |> Enum.to_list()
     end
 
-    def add(%Slots.Stream{} = stream, slot, options), do: Slots.Stream.add(stream, slot, options)
+    def add(%Slots.Stream{} = stream, slot, options \\ []),
+      do: Slots.Stream.add(stream, slot, options)
 
     def split(%Slots.Stream{} = slots, pivot, options \\ []) when is_locator(pivot) do
       {head, tail} = Slots.Stream.split(slots, pivot, options)
       {:ok, %Slots.Stream{slots: head}, %Slots.Stream{slots: tail}}
     end
 
-    def merge(%Slots.Stream{} = slots, other, options),
+    def merge(%Slots.Stream{} = slots, other, options \\ []),
       do: {:ok, Slots.Stream.merge(slots, other, options)}
 
     def inverse(%Slots.Stream{} = slots, options \\ []),
