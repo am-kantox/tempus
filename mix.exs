@@ -2,7 +2,7 @@ defmodule Tempus.MixProject do
   use Mix.Project
 
   @app :tempus
-  @version "0.16.0"
+  @version "1.0.0-rc.0"
 
   def project do
     [
