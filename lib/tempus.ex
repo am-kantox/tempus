@@ -1,13 +1,15 @@
 defmodule Tempus do
   @moduledoc """
-  `Tempus` is a library to deal with timeslots.
+  `Tempus` is a high-performance Elixir library for working with time slots,
+  business schedules, availability streams, and slot arithmetics.
 
-  It aims to be a fast yet easy to use implementation of a schedule of any type,
-    including but not limited to free/busy time schedules.
-
-  The example of it might be a calendar software, where slots might be marked as
-    free, or busy. It also allows simple arithmetics with schedules, like adding
-    five days or subtracting 7 hours 30 minutes from now, considering busy slots.
+  ### Features & Abstractions
+  - **Schedules (`Tempus.Slots`)**: Represents collections of time slots forming an Abelian group structure. Supports both eager list (`Tempus.Slots.List`) and lazy stream (`Tempus.Slots.Stream`) backends.
+  - **Interval Model**: Models slots as half-open intervals $[from, to)$ (`from_open: false`, `to_open: true`). Infinite bounds (`nil`) are open limits ($-\infty, +\infty$).
+  - **Schedule Arithmetics**:
+    - `Tempus.add/4`: Adds or subtracts durations (seconds, hours, days) while skipping busy/unavailable slots.
+    - `Tempus.next_free/2` & `Tempus.next_busy/2`: Navigating schedules forward or backward to locate available or occupied time slices.
+    - `Tempus.days_ahead/3`: Computes N business days ahead considering holidays, weekends, or arbitrary busy slots.
   """
 
   use Tempus.Telemetria

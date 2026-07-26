@@ -1,9 +1,22 @@
 defmodule Tempus.Slot do
   @moduledoc """
-  Declares a timeslot and exports functions to check whether the given date
-    and/or datetime is covered by this slot or not.
+  Declares a time slot interval and provides functions for interval arithmetic,
+  coverage checks, boundary comparisons, and transformations.
 
-  This module probably should not be called directly.
+  Slots in `Tempus` are modeled as mathematical intervals with configurable boundary openness:
+  - **Half-Open Intervals**: Standard slots default to $[from, to)$ (`from_open: false`, `to_open: true`).
+    For example, a date `~D[2023-04-12]` wraps into `%Slot{from: ~U[2023-04-12 00:00:00Z], to: ~U[2023-04-13 00:00:00Z], from_open: false, to_open: true}`.
+  - **Infinite / Unbound Limits**: A `nil` boundary represents infinity ($-\infty$ or $+\infty$) and is always treated as **open** (`from_open: true` when `from: nil`, `to_open: true` when `to: nil`).
+  - **Void / Identity Slot**: Represented by `%Slot{from: nil, to: nil, from_open: true, to_open: true}` (`Slot.id/0`).
+
+  ### Key Functions
+  - `Slot.wrap/1`: Converts a `Date`, `DateTime`, or `Time` into a `%Tempus.Slot{}`.
+  - `Slot.join/2`: Merges two overlapping or contiguous slots into a single maximal slot.
+  - `Slot.intersect/2`: Calculates the overlapping intersection of slots.
+  - `Slot.xor/2`: Returns the symmetric difference between two slots.
+  - `Slot.gap/1`: Finds the uncovered gap between slots.
+  - `Slot.cover?/2`: Checks if a `DateTime` or `Date` falls within the slot interval.
+  - `Slot.disjoint?/2` & `Slot.neighbour?/2`: Checks if slots are non-overlapping or adjacent/touching.
   """
   alias __MODULE__
 
@@ -106,7 +119,7 @@ defmodule Tempus.Slot do
   end
 
   @doc "Identity element, void slot `~I(nil → nil)`"
-  @spec id :: %Slot{from: nil, to: nil, from_open: true, to_open: true}
+  @spec id :: %{__struct__: Slot, from: nil, to: nil, from_open: true, to_open: true}
   def id, do: %Slot{from: nil, to: nil, from_open: true, to_open: true}
 
   @spec valid?(slot :: Slot.t()) :: boolean()

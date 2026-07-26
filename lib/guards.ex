@@ -1,6 +1,17 @@
 defmodule Tempus.Guards do
   @moduledoc since: "0.9.0"
-  @moduledoc "Handy guards to simplify pattern matching slots"
+  @moduledoc """
+  Compile-time guards for pattern matching, coverage verification, and slot comparisons.
+
+  Exported guards include:
+  - `is_origin/1`: Validates if a term is a `Date`, `DateTime`, `Time`, `Slot`, or `nil`.
+  - `is_slot/1` & `is_slot_nil/1`: Validates slot structs and void identity slots.
+  - `is_slot_open/1`: Checks if a slot has infinite/unbound endpoints.
+  - `is_slot_equal/2`: Checks if two slots have identical boundaries and boundary openness.
+  - `is_slot_coming_before/2`: Evaluates ordering of slots taking boundary openness into account.
+  - `is_datetime_covered/2`: Evaluates if a datetime falls inside a slot's half-open interval.
+  - `is_joint/2`: Evaluates if two slots overlap in any point of time.
+  """
 
   alias Tempus.Slot
 
