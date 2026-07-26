@@ -82,7 +82,7 @@ defmodule Tempus.MixProject do
       name: @app,
       files: ~w|stuff lib mix.exs README.md LICENSE|,
       maintainers: ["Aleksei Matiushkin"],
-      licenses: ["Kantox LTD"],
+      licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/am-kantox/#{@app}",
         "Docs" => "https://hexdocs.pm/#{@app}"
