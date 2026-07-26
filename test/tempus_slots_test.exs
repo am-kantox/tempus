@@ -129,4 +129,38 @@ defmodule Tempus.Slots.Test do
                |> Enum.take(4)
     end
   end
+
+  describe "Normalizers and collection operations" do
+    test "Normalizers functions" do
+      alias Tempus.Slots.Normalizers
+      assert Normalizers.pop_jid(join: true) == 0
+      assert Normalizers.pop_jid(join: false) == nil
+      assert Normalizers.pop_jid(join: 5) == 5
+
+      loc = Normalizers.to_locator(~I[2023-01-01 -> 2023-01-03]d, false)
+      assert is_function(loc, 1)
+      assert loc.(~I[2023-01-04 -> 2023-01-05]d) == :gt
+    end
+
+    test "Slots.List inverse and split" do
+      list = Slots.new(:list, [~D|2023-01-01|, ~D|2023-01-03|])
+      inv = Slots.List.inverse(list.slots)
+      assert length(inv.slots) == 3
+
+      {h, t} = Slots.List.split(list.slots, ~U[2023-01-02 00:00:00Z])
+      assert length(h) == 1
+      assert length(t) == 1
+    end
+
+    test "Slots.Stream inverse and split" do
+      stream = Slots.new(:stream, [~D|2023-01-01|, ~D|2023-01-03|])
+      inv = Slots.Stream.inverse(stream.slots)
+      inv_list = Enum.to_list(inv.slots)
+      assert length(inv_list) == 3
+
+      {h, t} = Slots.Stream.split(stream.slots, ~U[2023-01-02 00:00:00Z])
+      assert length(Enum.to_list(h)) == 1
+      assert length(Enum.to_list(t)) == 1
+    end
+  end
 end
