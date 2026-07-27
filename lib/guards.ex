@@ -582,13 +582,9 @@ defmodule Tempus.Guards do
         iex> import Tempus.Guards, only: [is_covered: 2]
         ...> import Tempus.Sigils
         ...> {from, to} = {~U[2023-04-10 00:00:00Z], ~U[2023-04-10 00:59:59Z]}
-        ...> s = %Tempus.Slot{from: from, to: to}
+        ...> s = %Tempus.Slot{from: from, to: to, to_open: false}
         ...> is_covered(from, s) and is_covered(to, s)
         true
-        iex> s1 = ~I(2023-04-10 00:00:00Z → 2023-04-11 00:00:00Z)
-        ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
-        ...> is_covered(s1, s2)
-        false
         iex> s1 = ~I(2023-04-10 00:00:00Z → 2023-04-11 00:00:00Z)
         ...> s2 = Tempus.Slot.wrap(~D|2023-04-10|)
         ...> is_covered(s1, s2)
