@@ -1,100 +1,93 @@
 # Comparing Tempus and Tempo
 
-Both [`Tempus`](https://github.com/am-kantox/tempus) and [`Tempo`](https://github.com/kipcole9/tempo) are Elixir libraries designed for working with time intervals, periods, and recurrences. However, they were created with fundamentally different design philosophies, mathematical foundations, and primary target use cases.
+Both [`Tempus`](https://github.com/am-kantox/tempus) and [`Tempo`](https://github.com/kipcole9/tempo) are Elixir libraries designed for working with time intervals, periods, and recurrences. However, they approach time modeling, standards compliance, and scheduling from distinct design philosophies.
 
 This guide provides a detailed comparison between `Tempus` and `Tempo` to help you choose the right tool for your project.
 
 ---
 
+## Core Value Propositions & Philosophies
+
+- **`Tempo`** treats **time primarily as an interval, not an instant**. By centering on interval mathematics, `Tempo` provides a **single, unified time type** (replacing separate `Date`, `Time`, `DateTime`, and `NaiveDateTime` types). It strictly implements **ISO 8601-2:2019 standards** (including open intervals, duration arithmetic, and unbounded recurrences), full set algebra, Allen-relation interval logic, territory-aware business calendars, and constraint-based schedule networks (`Tempo.Network`).
+- **`Tempus`** grounds slot management in **Group Theory** and discrete datetime slots (`Tempus.Slot`). It models collections of slots as an **Abelian Group** under union with identity and inverse elements. `Tempus` emphasizes **lazy infinite stream processing** (`Tempus.Slots.Stream`), explicit per-slot mathematical boundary flags (`[a, b)`, `(a, b]`, etc.), and lightweight, zero-overhead schedule arithmetic.
+
+---
+
 ## Executive Summary: Which One Should You Use?
 
-- **Use `Tempus` when** you are building **scheduling engines, calendar availability software, booking systems, or schedule arithmetics** (e.g., "calculate arrival time adding 15 business hours while skipping weekends, holidays, and busy slots", "find the next free 30-minute slot", or "compute the inverse of a busy calendar").
-- **Use `Tempo` when** you need **strict ISO 8601-2 compliance, ISO 8601 duration parsing (`P1Y2M3D`), or localized date/time interval formatting** across international locales (especially when integrating with `Cldr` / `ex_cldr`).
+- **Use `Tempus` when** you need:
+  - Group-theoretic set operations (e.g., computing identity and inverse slots via `Slots.inverse/1`),
+  - **Lazy infinite stream pipelines** (`Tempus.Slots.Stream`) for merging, slicing, or composing infinite recurring schedules without loading them into memory,
+  - Custom per-slot boundary configurations (explicitly defining closed vs. open endpoints),
+  - A lightweight library with minimal dependencies working directly on standard Elixir `DateTime` types.
+
+- **Use `Tempo` when** you need:
+  - A **unified time type** instead of managing separate `Date`, `Time`, `DateTime`, and `NaiveDateTime` types,
+  - **Strict ISO 8601-2 compliance** (open intervals like `~o"2026-01-01/.."`, ISO durations `P1Y2M3D`, and unbounded recurrences `R/...`),
+  - **Allen-relation interval comparisons** (e.g., `before`, `meets`, `overlaps`, `finishes`),
+  - Complex constraint scheduling via `Tempo.Network` or territory-aware business-day arithmetic with holiday calendars,
+  - Localized date/time interval formatting via `Localize`.
 
 ---
 
-## Architectural Comparison
+## Detailed Architectural Comparison
 
-### 1. Mathematical Foundations & Interval Models
+### 1. Interval Models & Endpoint Openness
+
+Both libraries adopt **strict half-open $[from, to)$** as their standard core convention, but handle boundaries and infinity differently:
 
 #### `Tempus`
-`Tempus` is grounded in **Group Theory** and formal set operations:
-- Slots are represented as rigorous **half-open intervals** $[from, to)$ (`from_open: false`, `to_open: true` by default).
-- Unbound endpoints (`nil`) represent negative or positive infinity ($-\infty, +\infty$) and are treated as open limits (`true`).
-- Slot collections (`Tempus.Slots`) form an **Abelian Group** under set union `∪`, possessing identity elements (void slots) and inverse elements (`Slots.inverse/1`).
-- Offers set operations: union (`merge`), intersection (`intersect`), symmetric difference (`xor`), and complement (`inverse`).
+- Slots (`Tempus.Slot`) wrap standard Elixir `DateTime` values and default to half-open $[from, to)$.
+- Allows explicit per-slot flags for boundary openness (`from_open`, `to_open`), supporting $[a, b)$, $(a, b]$, $[a, b]$, or $(a, b)$.
+- Unbound endpoints are represented as `nil`, treated as negative or positive infinity ($-\infty, +\infty$).
 
 #### `Tempo`
-`Tempo` is built around **ISO 8601-2:2019 standards** and Elixir `Calendar` types:
-- Intervals are represented via ISO 8601 start/end timestamps or start/duration pairs (e.g., `2023-01-01T00:00:00Z/P1M`).
-- Focuses on ISO repeating intervals (`R[n]/start/duration`).
-- Integrates deeply with Elixir `Calendar` types and ISO period calculations.
+- Uses a **unified time type** for all time concepts rather than separate `Date`/`DateTime` types.
+- Follows ISO 8601-2 open-interval syntax with first-class sigil support:
+  - `~o"2026-01-01/.."` — open end ($+\infty$),
+  - `~o"../2026-01-01"` — open start ($-\infty$).
+- Supports both bounded (`R5/...`) and **unbounded recurrences** (`R/...`) per ISO 8601-2.
 
 ---
 
-### 2. Schedule Arithmetics & Busy/Free Time
+### 2. Set Algebra, Allen Relations & Schedule Arithmetic
+
+Both libraries offer powerful set algebra and schedule manipulation, with different domain emphases:
 
 #### `Tempus`
-`Tempus` excels at **non-linear time arithmetic** across non-continuous schedules:
-- **`Tempus.add/4`**: Adds or subtracts duration units (seconds, minutes, hours, days) to a timestamp, automatically jumping over occupied/busy slots in the schedule.
-- **`Tempus.days_ahead/3`**: Calculates $N$ business days ahead, seamlessly skipping holidays, weekends, or arbitrary busy slots.
-- **`Tempus.next_free/2` & `Tempus.next_busy/2`**: Navigates forward or backward through a schedule to locate available or occupied time slices.
-
-```elixir
-alias Tempus.{Slot, Slots}
-import Tempus.Sigils
-
-# Create a schedule from holidays and weekends
-holidays = [~D[2023-12-25], ~D[2024-01-01]] |> Tempus.slots()
-weekends = [~D[2023-12-30], ~D[2023-12-31]] |> Tempus.slots()
-schedule = Slots.merge(holidays, weekends)
-
-# Add 8 working hours starting from Dec 24th, skipping non-working slots
-available_time = Tempus.add(schedule, ~U[2023-12-24 16:00:00Z], 8, :hour)
-```
+- Slot collections (`Tempus.Slots`) form an **Abelian Group** under set union `∪`, featuring identity elements (void slots) and inverse elements (`Slots.inverse/1`).
+- Provides set operations: `merge` (union), `intersect` (intersection), `xor` (symmetric difference), and `inverse` (complement).
+- Provides schedule arithmetic (`Tempus.add/4`, `Tempus.days_ahead/3`, `Tempus.next_free/2`, `Tempus.next_busy/2`) that automatically jumps over busy or non-working slots.
 
 #### `Tempo`
-`Tempo` focuses on ISO duration addition and interval shifting:
-- Shifting dates and datetimes by ISO 8601 durations (`P1M2D`).
-- Evaluating whether a date falls within an ISO interval or repeating sequence.
+- Full set algebra: union, intersection, difference, and complement (with `:bound`).
+- **Allen-relation comparison**: complete set of 13 interval relations (e.g., `before`, `meets`, `overlaps`, `starts`, `during`, `finishes`, `equals`, and their converses).
+- **Business-day arithmetic**: territory-aware weekends and holiday calendars.
+- **Constraint scheduling**: expressible via `Tempo.Network`. Complex scenarios like "Arrival time skipping weekends, holidays, and busy slots" are directly expressible in Tempo.
 
 ---
 
-### 3. Eager vs. Lazy Stream Backends
+### 3. Stream & Recurrence Backend
 
 #### `Tempus`
-`Tempus` provides two interchangeable collection backends:
-- **`Tempus.Slots.List`**: Eager, in-memory list representation.
-- **`Tempus.Slots.Stream`**: **Lazy, infinite stream backend** that allows merging, slicing, and operating on infinite recurring schedules (e.g. cron expressions or recurring business hours) without loading them into memory.
-
-```elixir
-# Create an infinite stream of weekly recurring slots using Crontab specs
-recurring_stream = Tempus.Slots.Stream.recurrent(
-  Date.utc_today(),
-  {7, "09:00:00", "Etc/UTC"}, # every 7 days at 09:00
-  {1, "17:00:00", "Etc/UTC"}  # ending at 17:00
-)
-
-# Take the first 100 slots lazily
-slots = Enum.take(recurring_stream, 100)
-```
+- Provides two collection backends:
+  - `Tempus.Slots.List`: Eager, in-memory representation.
+  - **`Tempus.Slots.Stream`**: **Lazy, infinite stream backend** for merging, slicing, and evaluating infinite recurring slots (e.g., cron expressions) on demand.
 
 #### `Tempo`
-`Tempo` provides Enumerable support for repeating ISO intervals, focusing on bounded ISO repeating series.
+- Implements `Enumerable` for ISO 8601 repeating series (`R/...`), supporting both bounded and unbounded ISO recurrence rules.
 
 ---
 
-### 4. Sigils & Ergonomics
+### 4. Dependencies & Localization
 
 #### `Tempus`
-Provides the `~I` sigil with explicit mathematical boundary indicators:
-- `~I[2023-04-10 10:00:00Z → 2023-04-10 12:00:00Z)` — closed start, open end.
-- `~I(2023-04-10 10:00:00Z → 2023-04-10 12:00:00Z]` — open start, closed end.
-- `~I(2023-04-10)d` — wraps full 24-hour day into a half-open slot.
-- `~I(nil → 2023-04-10)` — infinite open left bound.
+- Minimal, lightweight dependency footprint (`formulae`, `avl_tree`).
+- Basic timezone conversion helpers (`shift_tz`).
 
 #### `Tempo`
-Provides ISO string parsing and ISO 8601-2 string representations.
+- Powered by `Localize` for internationalized interval formatting.
+- **Time-zone-database agnostic**: recent releases eliminated heavy transitive dependencies (such as `tzdata` or `hackney`), resulting in a clean dependency chain.
 
 ---
 
@@ -102,15 +95,15 @@ Provides ISO string parsing and ISO 8601-2 string representations.
 
 | Feature / Aspect | `Tempus` | `Tempo` |
 | :--- | :--- | :--- |
-| **Primary Focus** | Schedule arithmetic, availability, free/busy slots | ISO 8601-2 repeating intervals & durations |
-| **Interval Openness Model** | Mathematical $[from, to)$ with explicit boundary flags | ISO 8601 start/end and start/duration |
-| **Infinite Bounds (`nil`)** | Supported & treated as open bounds ($-\infty, +\infty$) | Standard ISO start/end boundaries |
-| **Set Algebra** | Union, Intersection, `xor` (symmetric difference), Inversion | Interval containment & ISO alignment |
-| **Non-linear Arithmetic (`add/4`)** | Skips busy/unavailable schedule slots | Standard ISO duration addition |
-| **Stream Processing** | Infinite lazy streams (`Tempus.Slots.Stream`) | Enumerable ISO recurring sequences |
-| **Cron Support** | Integrated `Tempus.Crontab` parser | ISO repeating interval patterns |
-| **Dependencies** | Minimal & lightweight (`formulae`, `avl_tree`) | `ex_cldr` / ISO calendar ecosystem |
-| **Internationalization / i18n** | Timezone shifting (`shift_tz`) | Rich `Cldr` localized formatting |
+| **Primary Value Proposition** | Group-theoretic schedule arithmetic & lazy stream processing | Unified time type, ISO 8601-2 compliance & interval set logic |
+| **Time Representation** | `Tempus.Slot` wrapping standard Elixir `DateTime` | Single unified time type (replacing `Date`, `Time`, `DateTime`, etc.) |
+| **Core Interval Convention** | Strict half-open `[from, to)` (with optional custom boundary flags) | Strict half-open `[from, to)` |
+| **Open / Infinite Endpoints** | `nil` represents $-\infty / +\infty$ | First-class ISO 8601-2 open syntax (`~o"2026-01-01/.."`, `~o"../2026"`) |
+| **Set Algebra & Interval Logic** | Union (`merge`), Intersection (`intersect`), `xor`, Complement (`inverse`) | Full set algebra (union, intersection, difference, complement with `:bound`) & Allen relations |
+| **Schedule & Business Arithmetic** | `Tempus.add/4`, `days_ahead/3` jumping busy slots | Territory-aware business calendars & `Tempo.Network` constraint scheduling |
+| **Recurrences & Streams** | Infinite lazy streams (`Tempus.Slots.Stream`, `Crontab`) | Enumerable ISO recurring sequences (`R/...`), bounded & unbounded |
+| **Dependencies** | Minimal (`formulae`, `avl_tree`) | `Localize` (lightweight, timezone-database agnostic, no `tzdata`/`hackney`) |
+| **Localization / Formatting** | Timezone shifting (`shift_tz`) | Rich localized interval formatting via `Localize` |
 
 ---
 
@@ -118,26 +111,32 @@ Provides ISO string parsing and ISO 8601-2 string representations.
 
 ```mermaid
 graph TD
-    A[What is your primary requirement?] --> B{Do you need schedule arithmetic, booking, or free/busy time?}
-    B -- Yes --> C[Use Tempus]
-    B -- No --> D{Do you need ISO 8601-2 string compliance or localized i18n interval formatting?}
-    D -- Yes --> E[Use Tempo]
-    D -- No --> F{Do you need lazy infinite stream processing of recurring schedules?}
-    F -- Yes --> C
-    F -- No --> G{Do you need interval set operations like XOR or Inversion?}
-    G -- Yes --> C
-    G -- No --> E
+    A[What is your primary requirement?] --> B{Do you prefer standard Elixir DateTimes or a single unified time type?}
+    B -- Standard DateTimes --> C{Do you need lazy infinite stream pipelines or explicit per-slot boundary flags?}
+    B -- Unified Time Type --> D[Use Tempo]
+    C -- Yes --> E[Use Tempus]
+    C -- No --> F{Do you need ISO 8601-2 syntax, Allen relations, or Localize formatting?}
+    F -- Yes --> D
+    F -- No --> G{Do you need group-theoretic set inversion or lightweight setup?}
+    G -- Yes --> E
+    G -- No --> D
 ```
 
 ### Choose `Tempus` if:
-1. You are building an **appointment booking system**, **resource scheduling engine**, or **calendar app**.
-2. You need to calculate **working hours / business days** while skipping holidays, weekends, or lunch breaks.
-3. You need to convert a list of busy slots into free slots (`Slots.inverse/1`).
-4. You work with **infinite recurring streams** of availability.
-5. You want a lightweight library with concise mathematical sigil syntax (`~I`).
+1. You are working directly with standard Elixir `DateTime` types and `Tempus.Slot` abstractions.
+2. You need **lazy infinite stream processing** (`Tempus.Slots.Stream`) to handle infinite recurring schedule pipelines without loading slots into memory.
+3. You need group-theoretic set inversions (`Slots.inverse/1`) on custom slot lists.
+4. You require explicit custom boundary openness per slot (e.g. $(a, b]$ vs $[a, b)$).
+5. You prefer a lightweight, minimal-dependency library.
 
 ### Choose `Tempo` if:
-1. Your application must parse or output standard **ISO 8601-2 string formats** (e.g. `R3/2023-01-01T00:00:00Z/P1D`).
-2. You need to parse ISO 8601 duration strings (`P1Y2M3DT4H`).
-3. You require **localized string formatting** of intervals across multiple languages using `Cldr`.
-4. You are already heavily integrated into the `ex_cldr` suite of libraries.
+1. You want a **single unified time type** across your codebase instead of juggling `Date`, `Time`, `DateTime`, and `NaiveDateTime`.
+2. Your application requires standard **ISO 8601-2 open intervals** (`~o"2026-01-01/.."`) or ISO duration parsing (`P1Y2M3D`).
+3. You need **Allen-relation comparisons** (e.g., `meets`, `overlaps`, `finishes`).
+4. You use **`Tempo.Network` constraint scheduling** or territory-aware business-day arithmetic with holiday calendars.
+5. You need **localized string formatting** of time intervals via `Localize`.
+
+---
+
+> All-in-all, Tempo’s primary value proposition is that by considering time as an interval, not an instant, we solve a number of thorny time issues - and derive some interesting properties by thinking of time primarily as a set of intervals that can be operated on by set operations. We also end up with a unified time type - one type instead of Date, Time, DateTime and NaiveDateTime.
+> — [Kip Cole](https://forum.elixirforum.com/u/kip), the author of Tempo
